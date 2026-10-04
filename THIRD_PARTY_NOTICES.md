@@ -3,7 +3,7 @@
 Vojeto is AGPL-3.0. Dependency licenses remain their upstream licenses.
 
 - Nebula v1.11.2: MIT; copied packet plumbing and the modified packet-cache
-  patch retain the notice in NEBULA_LICENSE. Source: github.com/slackhq/nebula.
+  and rootless socket-buffer patches retain the notice in NEBULA_LICENSE. Source: github.com/slackhq/nebula.
 - gVisor: Apache-2.0; used as a Go module, not vendored or relicensed.
   Source and license: https://github.com/google/gvisor/blob/master/LICENSE.
 - Defined Networking dnapi: redistribution license unresolved. As inspected on

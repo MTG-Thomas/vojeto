@@ -1,0 +1,26 @@
+--- a/udp/udp_linux.go
++++ b/udp/udp_linux.go
+@@ -76,11 +76,21 @@
+ }
+ 
+ func (u *StdConn) SetRecvBuffer(n int) error {
+-	return unix.SetsockoptInt(u.sysFd, unix.SOL_SOCKET, unix.SO_RCVBUFFORCE, n)
++	err := unix.SetsockoptInt(u.sysFd, unix.SOL_SOCKET, unix.SO_RCVBUFFORCE, n)
++	if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) {
++		// Rootless callers can request buffers within the host's existing limit.
++		return unix.SetsockoptInt(u.sysFd, unix.SOL_SOCKET, unix.SO_RCVBUF, n)
++	}
++	return err
+ }
+ 
+ func (u *StdConn) SetSendBuffer(n int) error {
+-	return unix.SetsockoptInt(u.sysFd, unix.SOL_SOCKET, unix.SO_SNDBUFFORCE, n)
++	err := unix.SetsockoptInt(u.sysFd, unix.SOL_SOCKET, unix.SO_SNDBUFFORCE, n)
++	if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) {
++		// Rootless callers can request buffers within the host's existing limit.
++		return unix.SetsockoptInt(u.sysFd, unix.SOL_SOCKET, unix.SO_SNDBUF, n)
++	}
++	return err
+ }
+ 
+ func (u *StdConn) SetSoMark(mark int) error {

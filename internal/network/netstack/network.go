@@ -126,6 +126,19 @@ type Network struct {
 	config  *config.C
 }
 
+// newTCPStack supplies the transport configuration used by both encrypted
+// networking and the deterministic packet-loss regression.
+func newTCPStack() (*stack.Stack, error) {
+	s := stack.New(stack.Options{NetworkProtocols: []stack.NetworkProtocolFactory{ipv4.NewProtocol}, TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol}})
+	// gVisor disables SACK by default. Keep RACK's normal recovery and timers.
+	sack := tcpip.TCPSACKEnabled(true)
+	if err := s.SetTransportProtocolOption(tcp.ProtocolNumber, &sack); err != nil {
+		s.Close()
+		return nil, errors.New("netstack TCP recovery configuration failed")
+	}
+	return s, nil
+}
+
 func newOutboundNetwork(control *nebula.Control, d *routedDevice) (*Network, error) {
 	var address netip.Addr
 	for _, p := range d.Networks() {
@@ -137,15 +150,11 @@ func newOutboundNetwork(control *nebula.Control, d *routedDevice) (*Network, err
 	if !address.IsValid() {
 		return nil, errors.New("IPv4 identity required")
 	}
-	s := &Network{control: control, ipstack: stack.New(stack.Options{NetworkProtocols: []stack.NetworkProtocolFactory{ipv4.NewProtocol}, TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol}})}
-	// Match Nebula service behavior: gVisor disables SACK by default.
-	// Selective acknowledgements let parallel TCP streams recover packet loss
-	// without waiting for one retransmission timeout per missing segment.
-	sack := tcpip.TCPSACKEnabled(true)
-	if err := s.ipstack.SetTransportProtocolOption(tcp.ProtocolNumber, &sack); err != nil {
-		s.ipstack.Close()
-		return nil, errors.New("netstack TCP recovery configuration failed")
+	ipstack, err := newTCPStack()
+	if err != nil {
+		return nil, err
 	}
+	s := &Network{control: control, ipstack: ipstack}
 	link := channel.New(512, 1280, "")
 	if e := s.ipstack.CreateNIC(1, link); e != nil {
 		s.ipstack.Close()
@@ -230,6 +239,20 @@ func startReloadable(data []byte, loaded **config.C) (*Network, error) {
 	var cfg config.C
 	if err := cfg.LoadString(string(data)); err != nil {
 		return nil, errors.New("invalid Nebula configuration")
+	}
+	// Request a bounded UDP receive buffer through the ordinary rootless socket
+	// API. Linux may clamp it to the existing host limit; no sysctl changes.
+	if !cfg.IsSet("listen.read_buffer") {
+		listen, exists := cfg.Settings["listen"]
+		if !exists {
+			listen = map[string]any{}
+			cfg.Settings["listen"] = listen
+		}
+		settings, ok := listen.(map[string]any)
+		if !ok {
+			return nil, errors.New("invalid Nebula listen configuration")
+		}
+		settings["read_buffer"] = 256 << 10
 	}
 	if loaded != nil {
 		*loaded = &cfg
