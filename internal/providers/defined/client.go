@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -21,6 +22,10 @@ import (
 const responseLimit = 2 << 20
 
 var errControlPlane = errors.New("Defined control-plane request rejected")
+
+// ErrTransientPoll classifies only positively identified read-only outages.
+// It contains no response body, URL, credentials, or underlying error text.
+var ErrTransientPoll = errors.New("Defined read-only poll temporarily unavailable")
 
 // Client implements only the two DNClient operations needed by leased identities.
 // It uses SDK public signing, key and wire types; it does not use its HTTP client.
@@ -64,11 +69,21 @@ func (c *Client) request(ctx context.Context, operation string, value []byte, cr
 	req.Header.Set("User-Agent", "vojeto/initial")
 	resp, err := c.http.Do(req)
 	if err != nil {
+		var networkError net.Error
+		if operation == message.CheckForUpdate && !errors.Is(ctx.Err(), context.Canceled) && errors.As(err, &networkError) && networkError.Timeout() {
+			return nil, ErrTransientPoll
+		}
 		return nil, errControlPlane
 	}
 	defer resp.Body.Close()
 	// Error bodies can contain credentials or operator-controlled text. Never
 	// read or include them in errors, and never retry a possibly accepted update.
+	if operation == message.CheckForUpdate {
+		switch resp.StatusCode {
+		case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			return nil, ErrTransientPoll
+		}
+	}
 	if resp.StatusCode != http.StatusOK || resp.ContentLength > responseLimit {
 		return nil, errControlPlane
 	}

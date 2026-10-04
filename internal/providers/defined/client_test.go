@@ -95,7 +95,7 @@ func TestClientRejectsUnsafePollResponses(t *testing.T) {
 			t.Fatalf("unexpected error: %v", e)
 		}
 	}
-	for _, status := range []int{301, 302, 307, 308, 401, 403, 429, 500, 503} {
+	for _, status := range []int{301, 302, 307, 308, 401, 403, 500} {
 		c := testClient(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(status); io.WriteString(w, "secret") })
 		_, e := c.CheckForUpdate(context.Background(), credentials)
 		if e != errControlPlane {
@@ -127,7 +127,7 @@ func TestClientTimeoutAndCancellation(t *testing.T) {
 	c.http.Timeout = 25 * time.Millisecond
 	start := time.Now()
 	_, e := c.CheckForUpdate(context.Background(), clientCredentials(t, false))
-	if e != errControlPlane || time.Since(start) > time.Second {
+	if e != ErrTransientPoll || time.Since(start) > time.Second {
 		t.Fatal("timeout not bounded", e)
 	}
 	<-entered

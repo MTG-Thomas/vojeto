@@ -101,3 +101,12 @@ occur automatically.
 Defined requests use the [bounded HTTP adapter](defined-client.md): redirects are
 rejected, requests are limited to 30 seconds, and response bodies to 2 MiB.
 The supplied runtime renewal timeout can impose a shorter deadline.
+
+An optional `"pollOutageGrace": "5m"` provider setting permits only classified
+read-only transient poll failures while identity ownership and certificate bounds
+remain valid. Omit it or use `"0s"` to retain fail-closed behavior. Grace must
+exceed the configured poll interval plus request timeout and cannot exceed 24
+hours. Inline checkpoint certificates are required when enabled. Independent
+freshness expiry stops admission and active sessions even during a blocked poll;
+unknown/authentication failures and uncertain rotation never receive grace.
+See [the outage policy](defined-outage.md) for acceptance and quarantine rules.

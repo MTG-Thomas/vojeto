@@ -52,3 +52,20 @@ func TestExplicitClaimantEnvironment(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitPollOutageConfiguration(t *testing.T) {
+	for _, grace := range []struct {
+		value string
+		valid bool
+	}{{"5m", true}, {"0s", true}, {"-1s", false}, {"25h", false}, {"unknown", false}} {
+		path := filepath.Join(t.TempDir(), "provider.json")
+		body := `{"type":"defined-azure-pool","storageBaseURL":"https://state.example.invalid/identities","owner":"example","claimant":"example--job","hostIDs":["host-FIRST"],"networkID":"network-FIXTURE","pollOutageGrace":"` + grace.value + `"}`
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := selectProvider("", path)
+		if (err == nil) != grace.valid {
+			t.Fatal(grace.value, err)
+		}
+	}
+}

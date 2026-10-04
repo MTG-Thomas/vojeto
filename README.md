@@ -147,3 +147,7 @@ Defined identity requests use a [bounded HTTP adapter](docs/architecture/defined
 with redirect rejection, a 30-second request ceiling and a 2 MiB response limit.
 Polling failures remain fail-closed. SDK licensing and live deployment acceptance
 remain release blockers; this project is not yet a production replacement.
+
+Leased providers may opt into finite read-only control-plane outage grace using
+`pollOutageGrace` in their provider JSON. The default stays fail-closed. This never
+covers uncertain rotation or lease loss; see [the outage policy](docs/architecture/defined-outage.md).
