@@ -33,9 +33,12 @@ func (c *Client) Enroll(ctx context.Context, code, hostname string) ([]byte, []b
 	if err != nil {
 		return reject()
 	}
-	ed, err := generated.HostEd25519PublicKey.MarshalPEM()
-	if err != nil {
-		return reject()
+	var ed []byte
+	if generated.HostEd25519PublicKey != nil {
+		ed, err = generated.HostEd25519PublicKey.MarshalPEM()
+		if err != nil {
+			return reject()
+		}
 	}
 	p256, err := generated.HostP256PublicKey.MarshalPEM()
 	if err != nil {
@@ -85,6 +88,9 @@ func (c *Client) Enroll(ctx context.Context, code, hostname string) ([]byte, []b
 	var nebula []byte
 	switch enrolled.Network.Curve {
 	case message.NetworkCurve25519:
+		if generated.HostEd25519PrivateKey == nil || len(generated.NebulaX25519PrivateKeyPEM) == 0 {
+			return reject()
+		}
 		host, nebula = generated.HostEd25519PrivateKey, generated.NebulaX25519PrivateKeyPEM
 	case message.NetworkCurveP256:
 		host, nebula = generated.HostP256PrivateKey, generated.NebulaP256PrivateKeyPEM

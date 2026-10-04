@@ -8,6 +8,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -136,5 +138,31 @@ func TestEnrollmentRejectsIncompleteIdentityMetadata(t *testing.T) {
 				t.Fatal("incomplete identity accepted")
 			}
 		})
+	}
+}
+
+func TestEnrollmentWithP256OnlyKeys(t *testing.T) {
+	if os.Getenv("VOJETO_ENROLLMENT_FIPS_CHILD") != "1" {
+		command := exec.Command(os.Args[0], "-test.run=^TestEnrollmentWithP256OnlyKeys$")
+		command.Env = append(os.Environ(), "GODEBUG=fips140=only", "VOJETO_ENROLLMENT_FIPS_CHILD=1")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("P256-only enrollment failed: %v\n%s", err, output)
+		}
+		return
+	}
+	trusted, _ := keys.TrustedKeysToPEM(clientCredentials(t, true).TrustedKeys)
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		var request message.EnrollRequest
+		if json.NewDecoder(r.Body).Decode(&request) != nil || len(request.HostPubkeyEd25519) != 0 || len(request.NebulaPubkeyX25519) != 0 || len(request.HostPubkeyP256) == 0 || len(request.NebulaPubkeyP256) == 0 {
+			t.Error("P256-only request incorrect")
+		}
+		json.NewEncoder(w).Encode(map[string]any{"data": message.EnrollResponseData{HostID: "host-FIXTURE", Host: message.HostHostMetadata{ID: "host-FIXTURE", IPAddress: "192.0.2.1"}, Network: message.HostNetworkMetadata{ID: "network-FIXTURE", Curve: message.NetworkCurveP256}, Counter: 1, Config: []byte("fixture-config"), TrustedKeys: trusted}})
+	})
+	_, key, credentials, _, err := c.Enroll(context.Background(), "fixture-code", "")
+	if err != nil || len(key) == 0 || credentials == nil {
+		t.Fatal("P256-only enrollment refused", err)
+	}
+	if _, ok := credentials.PrivateKey.Unwrap().(*ecdsa.PrivateKey); !ok {
+		t.Fatal("wrong key curve")
 	}
 }

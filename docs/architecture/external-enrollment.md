@@ -1,7 +1,7 @@
 # Externally supplied enrollment
 
 The bounded Defined HTTP client can consume a caller-supplied one-time enrollment
-code in memory. It sends both supported public-key pairs to the configured HTTPS
+code in memory. It offers available supported public-key pairs to the configured HTTPS
 API and selects the private keys for the returned network curve. Requests reject
 redirects, have a finite timeout, cap responses at 2 MiB, and never retry. Errors
 contain no server text, URL, enrollment code or credentials.
@@ -60,7 +60,8 @@ infrastructure repository. The public client owns only Defined protocol handling
 
 ## Evidence
 
-Synthetic HTTPS fixtures cover both curves and correspondence between requested
+Synthetic HTTPS fixtures cover both curves, P256-only key generation under
+`GODEBUG=fips140=only` and correspondence between requested
 public signing keys and returned private keys, response limits, missing metadata,
 redirect rejection, request timeout, cancellation, one-attempt behavior and safe
 errors. Provider fixtures cover durable fencing, required policy, wrong host/network/
