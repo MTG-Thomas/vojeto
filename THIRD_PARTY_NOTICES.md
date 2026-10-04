@@ -15,3 +15,11 @@ Vojeto is AGPL-3.0. Dependency licenses remain their upstream licenses.
 The complete dependency inventory and versions are recorded in go.mod/go.sum.
 A release artifact still needs a complete dependency-license inventory before
 publication beyond the initial development container.
+
+`scripts/dependency-notices.py` collects license, notice, and patent files for the
+modules linked into `cmd/vojeto`, plus the Go runtime license. Supply the JSON
+stream from `go list -deps -json ./cmd/vojeto` and an explicit output directory and
+GOROOT. It exits nonzero for missing licenses. Current inspection identifies dnapi
+as the sole missing module license; upstream clarification is tracked at
+https://github.com/DefinedNet/dnapi/issues/52. This mechanical inventory does not
+replace review of license compatibility or required notices.

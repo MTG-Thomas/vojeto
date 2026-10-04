@@ -16,7 +16,12 @@ FROM scratch AS proof
 COPY --from=build /netstack.test /netstack.test
 USER 65532:65532
 ENTRYPOINT ["/netstack.test"]
+FROM proof AS measurements
+COPY --from=build /vojeto /vojeto
+ENV VOJETO_BINARY=/vojeto VOJETO_PROFILE=1 GOMEMLIMIT=96MiB
 FROM scratch AS runtime
+# Leave RSS headroom for a 128 MiB container; Go memory limits are soft.
+ENV GOMEMLIMIT=96MiB
 COPY --from=build /vojeto /vojeto
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY NEBULA_LICENSE /licenses/NEBULA_LICENSE

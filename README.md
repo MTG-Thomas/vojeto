@@ -131,3 +131,9 @@ See [extraction boundaries and compatibility](docs/architecture/extraction.md).
 ## License
 
 GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+
+Repeatable local resource measurements and their limits are documented in
+[Linux rootless measurements](docs/measurements/2026-10-04-linux-rootless.md).
+The image defaults to `GOMEMLIMIT=96MiB`; this soft runtime limit does not guarantee
+RSS or prove a platform memory budget. Production publication waits for the
+Defined SDK license clarification in [dnapi#52](https://github.com/DefinedNet/dnapi/issues/52).
