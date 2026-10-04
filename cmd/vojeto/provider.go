@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/DefinedNet/dnapi"
 	"github.com/MTG-Thomas/vojeto/internal/identity"
 	"github.com/MTG-Thomas/vojeto/internal/providers/azure"
 	"github.com/MTG-Thomas/vojeto/internal/providers/defined"
@@ -73,5 +72,9 @@ func selectProvider(staticPath, providerPath string) (identity.Provider, error) 
 	if e != nil {
 		return nil, e
 	}
-	return defined.NewProvider(store, dnapi.NewClient("vojeto/initial", api.String()), cfg.NetworkID)
+	dn, e := defined.NewClient(api.String(), &http.Client{Timeout: 30 * time.Second})
+	if e != nil {
+		return nil, e
+	}
+	return defined.NewProvider(store, dn, cfg.NetworkID)
 }
