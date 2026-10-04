@@ -138,6 +138,14 @@ func newOutboundNetwork(control *nebula.Control, d *routedDevice) (*Network, err
 		return nil, errors.New("IPv4 identity required")
 	}
 	s := &Network{control: control, ipstack: stack.New(stack.Options{NetworkProtocols: []stack.NetworkProtocolFactory{ipv4.NewProtocol}, TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol}})}
+	// Match Nebula service behavior: gVisor disables SACK by default.
+	// Selective acknowledgements let parallel TCP streams recover packet loss
+	// without waiting for one retransmission timeout per missing segment.
+	sack := tcpip.TCPSACKEnabled(true)
+	if err := s.ipstack.SetTransportProtocolOption(tcp.ProtocolNumber, &sack); err != nil {
+		s.ipstack.Close()
+		return nil, errors.New("netstack TCP recovery configuration failed")
+	}
 	link := channel.New(512, 1280, "")
 	if e := s.ipstack.CreateNIC(1, link); e != nil {
 		s.ipstack.Close()

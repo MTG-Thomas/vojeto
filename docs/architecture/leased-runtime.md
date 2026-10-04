@@ -85,3 +85,15 @@ sessions. They establish software behavior, not live Azure deployment support.
 Independent overlay/dependency readiness, measurements and platform validation
 remain #6/#7. Infra consumers remain on their existing pinned image until a
 separate reviewed deployment translation and runtime proof is authorized.
+
+For platform-assigned replica names, `claimantEnv` may name an explicitly supplied
+uppercase environment variable instead of `claimant`. Values are still validated
+against the configured owner; no platform environment variable is implicitly
+trusted. Configure exactly one of those sources. The infrastructure adapter owns
+which platform variable to select.
+
+Acquisition retries only confirmed full-pool lease contention, at one-second
+intervals within the caller's startup deadline. Authentication, unknown conflicts,
+and quarantined state fail immediately. Set `-acquire-timeout` to the declared
+startup budget; the default remains 30 seconds. No lease breaks or pool expansion
+occur automatically.

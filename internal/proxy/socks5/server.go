@@ -22,6 +22,9 @@ type Config struct {
 }
 
 func Serve(ctx context.Context, n network.Network, c Config) error {
+	return serve(ctx, n, c, net.Listen)
+}
+func serve(ctx context.Context, n network.Network, c Config, listen func(string, string) (net.Listener, error)) error {
 	a, e := netip.ParseAddrPort(c.Listen)
 	if e != nil || !a.Addr().IsLoopback() || len(c.Allow) == 0 || c.MaxConnections < 1 || c.DialTimeout <= 0 || c.Lifetime <= 0 {
 		return errors.New("invalid finite SOCKS policy")
@@ -35,7 +38,7 @@ func Serve(ctx context.Context, n network.Network, c Config) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.Lifetime)
 	defer cancel()
-	ln, e := net.Listen("tcp", c.Listen)
+	ln, e := listen("tcp", c.Listen)
 	if e != nil {
 		return e
 	}
@@ -72,9 +75,13 @@ func Serve(ctx context.Context, n network.Network, c Config) error {
 				local.Write([]byte{5, 2, 0, 1, 0, 0, 0, 0, 0, 0})
 				return
 			}
+			// Handshake and overlay dial have separate bounded phases; retaining
+			// the expired handshake deadline would prevent a failure reply.
+			local.SetDeadline(time.Time{})
 			dial, cancel := context.WithTimeout(ctx, c.DialTimeout)
 			remote, e := n.DialTCP(dial, dst)
 			cancel()
+			local.SetWriteDeadline(time.Now().Add(c.DialTimeout))
 			if e != nil {
 				local.Write([]byte{5, 4, 0, 1, 0, 0, 0, 0, 0, 0})
 				return

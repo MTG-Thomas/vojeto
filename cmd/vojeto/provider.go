@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"time"
 )
 
@@ -22,6 +23,7 @@ type providerConfig struct {
 	StorageBaseURL string   `json:"storageBaseURL"`
 	Owner          string   `json:"owner"`
 	Claimant       string   `json:"claimant"`
+	ClaimantEnv    string   `json:"claimantEnv,omitempty"`
 	HostIDs        []string `json:"hostIDs"`
 	NetworkID      string   `json:"networkID"`
 	DefinedAPI     string   `json:"definedAPI"`
@@ -48,6 +50,12 @@ func selectProvider(staticPath, providerPath string) (identity.Provider, error) 
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&cfg) != nil || decoder.Decode(new(any)) != io.EOF || cfg.Type != "defined-azure-pool" {
 		return nil, errors.New("identity provider configuration rejected")
+	}
+	if cfg.ClaimantEnv != "" {
+		if cfg.Claimant != "" || !regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,127}$`).MatchString(cfg.ClaimantEnv) {
+			return nil, errors.New("claimant environment rejected")
+		}
+		cfg.Claimant = os.Getenv(cfg.ClaimantEnv)
 	}
 	if cfg.DefinedAPI == "" {
 		cfg.DefinedAPI = "https://api.defined.net"

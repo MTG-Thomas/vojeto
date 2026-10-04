@@ -14,6 +14,14 @@ type Status struct {
 }
 
 func Handler(status func() Status, complete func()) http.Handler {
+	mux := healthMux(status)
+	mux.HandleFunc("POST /v1/lifecycle/complete", func(w http.ResponseWriter, r *http.Request) { complete(); w.WriteHeader(202) })
+	return mux
+}
+
+// HealthHandler deliberately excludes lifecycle mutations, even on public binds.
+func HealthHandler(status func() Status) http.Handler { return healthMux(status) }
+func healthMux(status func() Status) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /live", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
@@ -28,6 +36,5 @@ func Handler(status func() Status, complete func()) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(status())
 	})
-	mux.HandleFunc("POST /v1/lifecycle/complete", func(w http.ResponseWriter, r *http.Request) { complete(); w.WriteHeader(202) })
 	return mux
 }
