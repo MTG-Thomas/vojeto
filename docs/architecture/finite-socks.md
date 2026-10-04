@@ -45,5 +45,7 @@ The blocking `socks5.Serve` library API remains available. `socks5.Open` supplie
 runtime-managed admission, active counts, lifetime notification and bounded drain.
 Tests retain the original protocol, allowlist, limit, cancellation and repeated
 dial-timeout behavior, and add shared global admission, graceful active-session
-drain, pending-handshake/dial cancellation and lifetime cleanup. Platform-specific
+drain, pending-handshake/dial cancellation and lifetime cleanup. The container proof runs the actual CLI against an encrypted peer, checks denied
+and allowed destinations, compares relayed bytes and leaves a session active until
+lifetime expiry closes it and the process exits cleanly. Platform-specific
 worker completion and deployment wrappers belong to the consumer repository.
