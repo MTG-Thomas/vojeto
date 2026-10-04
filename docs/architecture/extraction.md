@@ -2,7 +2,8 @@
 
 Source: bifrost-infra commit 971618addb8a2f0ed09f59668dc25f10ad3a1965,
 `tools/nebula-userspace-proof`. Target: portable Linux software; no deployment changes.
-Engineering procedure: mtg-engineering-flow 2026-09-30.1.
+Procedure package: mtg-codex-skills 2026-10-03.6.
+The engineering-flow component retains metadata version 2026-09-30.1.
 
 Extracted packet plumbing retains the Nebula MIT notice and dependency licensing.
 gVisor remains a module dependency, with its upstream license obligations intact.
@@ -45,11 +46,12 @@ server name. Vojeto relays opaque bytes and never terminates database TLS.
 
 ## Outstanding acceptance
 
-Provider adapters are library primitives, not yet a complete acquired/renewed
-identity runtime. The static CLI performs no ownership release/checkpoint because
-it does not acquire exclusive ownership. Lifecycle hooks enforce checkpoint and
-transport-stop before provider release, but leased-runtime orchestration remains
-required. Recovery is fail-stop; automatic reacquisition is not implemented.
+Static and leased Defined/Azure Blob identities now share the portable runtime.
+The static provider performs no exclusive lease mutation. The leased provider
+monitors ownership independently of SDK polling and keeps renewals running through
+bounded session drain. Checkpoint, synchronous transport stop, monitor join and
+release ordering are covered by cross-package tests. See [runtime semantics](leased-runtime.md).
+Recovery is fail-stop; automatic reacquisition is not implemented.
 
 Required dependency probes, resolver implementations, configurable CLI SOCKS,
 metrics, multi-architecture validation, FD/goroutine stress testing, platform deployment tests remain release gates.

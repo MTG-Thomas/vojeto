@@ -100,12 +100,16 @@ An optional `-control-socket /private/control.sock` enables permission-0600 Unix
 control: `POST /v1/lifecycle/complete` performs the same bounded shutdown.
 Use a private parent directory to prevent cross-user socket replacement.
 
-This CLI currently uses static Nebula configuration and numeric IPv4 targets.
+The CLI accepts static Nebula configuration or a pre-enrolled Defined/Azure Blob
+identity pool, with numeric IPv4 forwarding targets.
 An explicit resolver abstraction exists; hostnames fail closed until a resolver
 is supplied. It never falls back to host dialing or modifies system DNS.
 The allowlisted finite SOCKS library is opt-in and is not enabled by the CLI.
-Defined credential checkpoint/rotation and configurable Azure lease primitives
-are extracted with their tests, but their runtime provider integration is pending.
+Defined checkpoint/rotation and Azure lease ownership now run through the portable
+runtime. Lease loss closes admission and active sessions; uncertain credential
+updates leave the identity quarantined. No automatic takeover or reacquisition
+is attempted. Pool provisioning and recovery remain operator responsibilities.
+See [leased identity configuration and shutdown](docs/architecture/leased-runtime.md).
 
 `/live`, `/ready`, and `/status` are available through the control socket. Readiness
 remains false until overlay/dependency probes are integrated; process startup is
