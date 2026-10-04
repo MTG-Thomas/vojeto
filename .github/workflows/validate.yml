@@ -1,0 +1,28 @@
+name: Validate portable runtime
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  portable:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Race tests, patched upstream regression and native compilation
+        run: docker build --target proof --tag vojeto-proof .
+      - name: Rootless encrypted overlay proof
+        run: docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges -e REQUIRE_ZERO_CAPABILITIES=1 vojeto-proof -test.v
+      - name: Compile ARM64 runtime
+        run: docker build --target runtime --build-arg TARGETARCH=arm64 --tag vojeto-arm64 .
+      - name: Verify rootless image default
+        run: test "$(docker inspect --format '{{.Config.User}}' vojeto-arm64)" = '65532:65532'
+# Publication is intentionally gated on the dependency-license inventory (#10).
+# Build success here is source evidence, not platform runtime acceptance.
