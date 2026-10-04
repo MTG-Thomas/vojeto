@@ -19,8 +19,11 @@ The implementation is being extracted from a working prototype originally develo
 - private IPv4 routing through an existing Nebula/Defined router;
 - loopback TCP forwarding for PostgreSQL and Redis;
 - Managed Defined enrollment;
-- exclusively leased identity pools with rotation/checkpointing;
-- finite, loopback-only SOCKS5 TCP CONNECT with explicit destination allowlists, bounded connections, and cancellation.
+- exclusively leased identity pools with rotation/checkpointing.
+
+Vojeto additionally implements finite, loopback-only SOCKS5 TCP CONNECT with
+explicit allowlists, bounded connections, and cancellation; that behavior is
+covered by Vojeto tests rather than evidence from the current infra prototype.
 
 The extraction will preserve those behaviors while separating portable client functionality from BiFrost-, Azure-, and Defined-specific policy.
 
@@ -95,15 +98,17 @@ Configuration contains credentials and must remain private. Forward JSON is an a
 ```
 
 Durations are currently JSON nanoseconds. Global connections default to 128;
-`-drain-timeout` defaults to 30 seconds. SIGTERM/SIGINT stop admission and drain.
+`-drain-timeout` defaults to 30 seconds. SIGTERM/SIGINT stop admission and drain by default. An explicit `-signal-grace`
+withdraws readiness while allowing native applications to finish before admission
+stops; exclusive ownership remains monitored throughout. Explicit completion skips
+that allowance and starts bounded drain immediately.
 An optional `-control-socket /private/control.sock` enables permission-0600 Unix
 control: `POST /v1/lifecycle/complete` performs the same bounded shutdown.
 Use a private parent directory to prevent cross-user socket replacement.
 
 The CLI accepts static Nebula configuration or a pre-enrolled Defined/Azure Blob
-identity pool, with numeric IPv4 forwarding targets.
-An explicit resolver abstraction exists; hostnames fail closed until a resolver
-is supplied. It never falls back to host dialing or modifies system DNS.
+identity pool. Forwarding targets may use numeric IPv4 or names explicitly
+mapped in the readiness configuration. Unmapped names fail closed. It never falls back to host dialing or modifies system DNS.
 The allowlisted finite SOCKS library is opt-in and is not enabled by the CLI.
 Defined checkpoint/rotation and Azure lease ownership now run through the portable
 runtime. Lease loss closes admission and active sessions; uncertain credential
@@ -112,8 +117,9 @@ is attempted. Pool provisioning and recovery remain operator responsibilities.
 See [leased identity configuration and shutdown](docs/architecture/leased-runtime.md).
 
 `/live`, `/ready`, and `/status` are available through the control socket. Readiness
-remains false until overlay/dependency probes are integrated; process startup is
-not proof of overlay connectivity. Status contains only bounded health fields.
+requires successful configured overlay and dependency probes; process startup
+is not proof of overlay connectivity. Status contains only bounded health fields.
+See [readiness and native drain configuration](docs/architecture/readiness.md).
 
 Container runtime: UID 65532, `--cap-drop ALL --read-only --security-opt
 no-new-privileges`, no TUN device. Mount secret config read-only; mount a small

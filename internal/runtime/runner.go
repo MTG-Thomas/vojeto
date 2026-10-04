@@ -32,21 +32,29 @@ func DefaultConfig() Config {
 }
 
 type Runner struct {
-	Provider       identity.Provider
-	Open           func(context.Context, []byte) (Transport, error)
-	StartSessions  func(context.Context, network.Network) ([]Session, error)
-	Config         Config
-	state          *lifecycle.Manager
-	mu             sync.Mutex
-	current        *identity.Identity
-	transport      *managedTransport
-	sessions       []Session
-	cancelSessions context.CancelFunc
-	cancelStartup  context.CancelFunc
-	failed         bool
-	failure        chan struct{}
-	failureOnce    sync.Once
-	running        bool
+	// SignalGrace keeps the overlay available for native application drain after
+	// platform cancellation. Explicit completion skips this grace.
+	SignalGrace   time.Duration
+	quiescing     bool
+	Provider      identity.Provider
+	Open          func(context.Context, []byte) (Transport, error)
+	StartSessions func(context.Context, network.Network) ([]Session, error)
+	Config        Config
+	// CheckHealth must honor cancellation. Nil means readiness is unverified.
+	CheckHealth                     func(context.Context, network.Network) (overlay, dependencies bool)
+	HealthInterval                  time.Duration
+	overlayReady, dependenciesReady bool
+	state                           *lifecycle.Manager
+	mu                              sync.Mutex
+	current                         *identity.Identity
+	transport                       *managedTransport
+	sessions                        []Session
+	cancelSessions                  context.CancelFunc
+	cancelStartup                   context.CancelFunc
+	failed                          bool
+	failure                         chan struct{}
+	failureOnce                     sync.Once
+	running                         bool
 }
 
 func New(p identity.Provider, open func(context.Context, []byte) (Transport, error), sessions func(context.Context, network.Network) ([]Session, error), cfg Config) (*Runner, error) {
@@ -58,16 +66,22 @@ func New(p identity.Provider, open func(context.Context, []byte) (Transport, err
 func (r *Runner) Status() control.Status {
 	r.mu.Lock()
 	valid := r.current != nil && !r.failed
+	overlay, dependencies := r.overlayReady, r.dependenciesReady
+	quiescing := r.quiescing
 	r.mu.Unlock()
 	if v, ok := r.Provider.(identity.Validity); ok && valid {
 		valid = v.Valid()
 	}
 	s := r.state.State()
-	return control.Status{State: string(s), IdentityValid: valid && s != lifecycle.Stopped && s != lifecycle.ReleasingIdentity}
+	if quiescing && (s == lifecycle.Ready || s == lifecycle.Rotating) {
+		s = lifecycle.Draining
+	}
+	return control.Status{State: string(s), IdentityValid: valid && s != lifecycle.Stopped && s != lifecycle.ReleasingIdentity, OverlayReady: valid && overlay && s == lifecycle.Ready, DependenciesReady: valid && dependencies && s == lifecycle.Ready}
 }
 func (r *Runner) fail(ownership bool) {
 	r.mu.Lock()
 	r.failed = true
+	r.overlayReady, r.dependenciesReady = false, false
 	sessions := append([]Session(nil), r.sessions...)
 	cancel := r.cancelSessions
 	cancelStartup := r.cancelStartup
@@ -150,11 +164,18 @@ func (r *Runner) Run(ctx context.Context, completion <-chan struct{}) (result er
 	pollCtx, cancelPoll := context.WithCancel(context.Background())
 	pollDone := make(chan struct{})
 	pollStarted := false
+	healthCtx, cancelHealth := context.WithCancel(context.Background())
+	healthDone := make(chan struct{})
+	healthStarted := false
 	defer func() {
 		if result != nil {
 			r.fail(false)
 		}
 		cancelStartup()
+		cancelHealth()
+		if healthStarted {
+			<-healthDone
+		}
 		close(startupDone)
 		<-startupWatcherDone
 		drainCtx, cancelDrain := context.WithTimeout(context.Background(), r.Config.DrainTimeout)
@@ -271,6 +292,48 @@ func (r *Runner) Run(ctx context.Context, completion <-chan struct{}) (result er
 		wrapped.Close()
 		return errors.New("identity ownership lost during initialization")
 	}
+	if r.CheckHealth != nil {
+		interval := r.HealthInterval
+		if interval <= 0 {
+			interval = 5 * time.Second
+		}
+		for {
+			overlay, dependencies := r.CheckHealth(startup, wrapped)
+			if startup.Err() != nil {
+				return errors.New("startup readiness deadline exceeded")
+			}
+			r.mu.Lock()
+			r.overlayReady, r.dependenciesReady = overlay, dependencies
+			r.mu.Unlock()
+			if overlay && dependencies {
+				break
+			}
+			timer := time.NewTimer(interval)
+			select {
+			case <-startup.Done():
+				timer.Stop()
+				return errors.New("startup readiness deadline exceeded")
+			case <-timer.C:
+			}
+		}
+		healthStarted = true
+		go func() {
+			defer close(healthDone)
+			ticks := time.NewTicker(interval)
+			defer ticks.Stop()
+			for {
+				select {
+				case <-healthCtx.Done():
+					return
+				case <-ticks.C:
+				}
+				overlay, dependencies := r.CheckHealth(healthCtx, wrapped)
+				r.mu.Lock()
+				r.overlayReady, r.dependenciesReady = overlay, dependencies
+				r.mu.Unlock()
+			}
+		}()
+	}
 	sessions, e := r.StartSessions(sessionsCtx, wrapped)
 	r.mu.Lock()
 	r.sessions = sessions
@@ -290,6 +353,19 @@ func (r *Runner) Run(ctx context.Context, completion <-chan struct{}) (result er
 	go func() { defer close(pollDone); r.poll(pollCtx) }()
 	select {
 	case <-ctx.Done():
+		r.mu.Lock()
+		r.quiescing = true
+		r.mu.Unlock()
+		if r.SignalGrace > 0 {
+			timer := time.NewTimer(r.SignalGrace)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-completion:
+			case <-r.failure:
+				return errors.New("identity lost during signal grace")
+			}
+		}
 		return nil
 	case <-completion:
 		return nil

@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"github.com/MTG-Thomas/vojeto/internal/control"
 	"github.com/MTG-Thomas/vojeto/internal/forward"
+	"github.com/MTG-Thomas/vojeto/internal/health"
 	"github.com/MTG-Thomas/vojeto/internal/network"
 	"github.com/MTG-Thomas/vojeto/internal/network/netstack"
 	"github.com/MTG-Thomas/vojeto/internal/runtime"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"sync"
@@ -24,6 +26,9 @@ func run() error {
 	config := flag.String("config", "", "secret static Nebula configuration file")
 	providerConfig := flag.String("identity-provider", "", "JSON identity-provider settings (alternative to -config)")
 	forwards := flag.String("forwards", "", "JSON array of named forwards")
+	readinessFile := flag.String("readiness", "", "JSON overlay mappings and required dependency probes")
+	healthListen := flag.String("health-listen", "", "optional read-only health HTTP listener (loopback by default)")
+	publicHealth := flag.Bool("allow-public-health", false, "explicitly allow non-loopback read-only health listener")
 	maximum := flag.Int("max-connections", 128, "global session ceiling")
 	cfg := runtime.DefaultConfig()
 	flag.DurationVar(&cfg.DrainTimeout, "drain-timeout", cfg.DrainTimeout, "shutdown drain bound")
@@ -31,9 +36,10 @@ func run() error {
 	flag.DurationVar(&cfg.RenewInterval, "renew-interval", cfg.RenewInterval, "credential poll interval")
 	flag.DurationVar(&cfg.RenewTimeout, "renew-timeout", cfg.RenewTimeout, "credential update bound")
 	flag.DurationVar(&cfg.CleanupTimeout, "cleanup-timeout", cfg.CleanupTimeout, "checkpoint/release cleanup bound")
+	signalGrace := flag.Duration("signal-grace", 0, "native application drain allowance before stopping admission (0 to 5m)")
 	socket := flag.String("control-socket", "", "optional Unix control socket in a private writable directory")
 	flag.Parse()
-	if *maximum < 1 {
+	if *maximum < 1 || *signalGrace < 0 || *signalGrace > 5*time.Minute {
 		return errors.New("invalid connection limit")
 	}
 	provider, e := selectProvider(*config, *providerConfig)
@@ -45,12 +51,23 @@ func run() error {
 	if e != nil || json.Unmarshal(data, &entries) != nil || len(entries) == 0 {
 		return errors.New("invalid forwards")
 	}
+	settings, resolver, e := loadReadiness(*readinessFile)
+	if e != nil {
+		return e
+	}
 	limit := forward.NewLimit(*maximum)
 	runner, e := runtime.New(provider, func(ctx context.Context, data []byte) (runtime.Transport, error) {
 		if e := ctx.Err(); e != nil {
 			return nil, e
 		}
-		return netstack.Open(data)
+		n, err := netstack.Open(data)
+		if err != nil {
+			return nil, err
+		}
+		if resolver != nil {
+			return &resolvedTransport{Transport: n, resolver: resolver}, nil
+		}
+		return n, nil
 	}, func(ctx context.Context, n network.Network) ([]runtime.Session, error) {
 		var sessions []runtime.Session
 		for _, c := range entries {
@@ -64,6 +81,27 @@ func run() error {
 	}, cfg)
 	if e != nil {
 		return e
+	}
+	runner.SignalGrace = *signalGrace
+	if settings != nil {
+		runner.CheckHealth = func(ctx context.Context, n network.Network) (bool, bool) {
+			overlay := health.CheckAll(ctx, n, settings.Overlay, 5*time.Second)
+			dependencies := health.CheckAll(ctx, n, settings.Dependencies, 5*time.Second)
+			return overlay, dependencies
+		}
+	}
+	if *healthListen != "" {
+		a, err := netip.ParseAddrPort(*healthListen)
+		if err != nil || (!a.Addr().IsLoopback() && !*publicHealth) {
+			return errors.New("explicit health bind required")
+		}
+		ln, err := net.Listen("tcp", a.String())
+		if err != nil {
+			return errors.New("health listener unavailable")
+		}
+		server := &http.Server{Handler: control.HealthHandler(runner.Status), ReadHeaderTimeout: time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
+		defer server.Close()
+		go server.Serve(ln)
 	}
 	completed := make(chan struct{})
 	var once sync.Once
