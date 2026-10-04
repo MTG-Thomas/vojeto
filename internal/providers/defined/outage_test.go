@@ -31,6 +31,16 @@ func TestReadOnlyOutageClassification(t *testing.T) {
 	}
 }
 
+func TestOversizedTransientResponseDoesNotAuthorizeGrace(t *testing.T) {
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "2097153")
+		w.WriteHeader(503)
+	})
+	if _, err := c.CheckForUpdate(context.Background(), clientCredentials(t, false)); err != errControlPlane {
+		t.Fatal("oversized response allowed grace", err)
+	}
+}
+
 func TestOutageGraceDefaultAndColdStartFailClosed(t *testing.T) {
 	for _, stage := range []string{"startup", "renewal"} {
 		p, _, c := providerFixture(t)

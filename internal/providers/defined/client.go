@@ -76,6 +76,9 @@ func (c *Client) request(ctx context.Context, operation string, value []byte, cr
 		return nil, errControlPlane
 	}
 	defer resp.Body.Close()
+	if resp.ContentLength > responseLimit {
+		return nil, errControlPlane
+	}
 	// Error bodies can contain credentials or operator-controlled text. Never
 	// read or include them in errors, and never retry a possibly accepted update.
 	if operation == message.CheckForUpdate {
