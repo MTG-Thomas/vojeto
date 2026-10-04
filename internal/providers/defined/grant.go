@@ -20,10 +20,14 @@ import (
 
 // EnrollmentGrant contains a secret one-time code and caller-approved constraints.
 // RoutePolicy is a Nebula YAML fragment containing the approved tun.unsafe_routes;
-// {} explicitly approves no unsafe routes. Never render a grant in diagnostics.
+// {} explicitly approves no unsafe routes. Addresses pins a known allocation;
+// AddressRanges approves an allocation whose address is not known until enrollment.
+// At least one is required; when both are supplied, both must match.
+// Never render a grant in diagnostics.
 type EnrollmentGrant struct {
 	Code, HostID, NetworkID string
 	Addresses               []string
+	AddressRanges           []netip.Prefix
 	RoutePolicy             []byte
 }
 
@@ -84,28 +88,58 @@ func (s *grantStore) Acquire(ctx context.Context) ([]byte, error) {
 		snapshot := *supplied
 		snapshot.Addresses = append([]string(nil), supplied.Addresses...)
 		snapshot.RoutePolicy = bytes.Clone(supplied.RoutePolicy)
+		snapshot.AddressRanges = append([]netip.Prefix(nil), supplied.AddressRanges...)
 		grant = &snapshot
 		supplied.Code = ""
 	}
-	if err != nil || grant == nil || grant.HostID == "" || grant.NetworkID != s.networkID || len(grant.Addresses) == 0 || len(grant.RoutePolicy) == 0 || !s.Valid() || ctx.Err() != nil {
+	if err != nil || grant == nil || grant.HostID == "" || grant.NetworkID != s.networkID || (len(grant.Addresses) == 0 && len(grant.AddressRanges) == 0) || len(grant.RoutePolicy) == 0 || !s.Valid() || ctx.Err() != nil {
 		return reject()
 	}
 	var policy config.C
 	if policy.LoadString(string(grant.RoutePolicy)) != nil {
 		return reject()
 	}
-	expected := make(map[netip.Addr]bool, len(grant.Addresses))
+	approved := make(map[netip.Addr]bool, len(grant.Addresses))
 	for _, raw := range grant.Addresses {
+		ip, err := netip.ParseAddr(raw)
+		if err != nil || approved[ip] {
+			return reject()
+		}
+		approved[ip] = true
+	}
+	for _, prefix := range grant.AddressRanges {
+		if !prefix.IsValid() {
+			return reject()
+		}
+	}
+	data, key, credentials, meta, err := s.client.Enroll(ctx, grant.Code, s.hostname)
+	grant.Code = ""
+	if err != nil || credentials == nil || meta == nil || credentials.HostID != grant.HostID || meta.Host.ID != grant.HostID || meta.Network.ID != s.networkID || (len(grant.Addresses) > 0 && !reflect.DeepEqual(meta.Host.IPAddresses, grant.Addresses)) || !s.Valid() || ctx.Err() != nil {
+		return reject()
+	}
+	addresses := append([]string(nil), meta.Host.IPAddresses...)
+	if len(addresses) == 0 {
+		return reject()
+	}
+	expected := make(map[netip.Addr]bool, len(addresses))
+	for _, raw := range addresses {
 		ip, err := netip.ParseAddr(raw)
 		if err != nil || expected[ip] {
 			return reject()
 		}
+		if len(grant.AddressRanges) > 0 {
+			permitted := false
+			for _, prefix := range grant.AddressRanges {
+				if prefix.Contains(ip) {
+					permitted = true
+					break
+				}
+			}
+			if !permitted {
+				return reject()
+			}
+		}
 		expected[ip] = true
-	}
-	data, key, credentials, meta, err := s.client.Enroll(ctx, grant.Code, s.hostname)
-	grant.Code = ""
-	if err != nil || credentials == nil || meta == nil || credentials.HostID != grant.HostID || meta.Host.ID != grant.HostID || meta.Network.ID != s.networkID || !reflect.DeepEqual(meta.Host.IPAddresses, grant.Addresses) || !s.Valid() || ctx.Err() != nil {
-		return reject()
 	}
 	data, err = dnapi.InsertConfigPrivateKey(data, key)
 	if err != nil {
@@ -142,7 +176,7 @@ func (s *grantStore) Acquire(ctx context.Context) ([]byte, error) {
 	if count == 0 || !s.Valid() || ctx.Err() != nil {
 		return reject()
 	}
-	encoded, err := encodeIdentityState(grant.HostID, grant.Addresses, data, credentials)
+	encoded, err := encodeIdentityState(grant.HostID, addresses, data, credentials)
 	if err != nil || s.Checkpoint(ctx, encoded) != nil || !s.Valid() || ctx.Err() != nil {
 		return reject()
 	}

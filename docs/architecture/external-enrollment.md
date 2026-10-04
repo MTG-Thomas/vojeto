@@ -15,7 +15,9 @@ release ownership, or persist a grant.
 and `EnrollmentStore` implementations. The store acquires a fresh exclusive
 allocation and durably marks the attempt before the source supplies a grant.
 It snapshots the approved constraints before making any HTTP request.
-The provider validates the expected host, network and addresses, verifies inline
+The provider validates the expected host and network and either exact caller-
+approved addresses or caller-approved address ranges. Both constraints apply
+when both are supplied; neither defaults to an unrestricted policy. It verifies inline
 certificates against their CA and the expected addresses, checks the approved
 unsafe-route fragment, and checkpoints the accepted identity before startup
 authentication. It then uses the existing provider for strict rotation and shutdown.
@@ -48,6 +50,14 @@ on the next acquisition. The persistence adapter must represent this distinction
 explicitly: `BeginEnrollment` must durably prevent retry after an uncertain attempt,
 and `Acquire` must reject unclean or uncertain allocations after restart. An
 adapter that cannot provide that fencing must not implement `EnrollmentStore`.
+
+Some issuers return a host ID before the assigned address is known. A source may
+supply `AddressRanges` instead of exact `Addresses`, using the caller's configured
+network ranges. Every returned address must be valid, unique, inside an approved
+range and present in the verified certificate. The actual accepted addresses are
+checkpointed and fixed for subsequent rotation. A later change is rejected even
+when the new address falls inside the same approved range. No range is inferred
+from the enrollment response and no environment's network range is built in.
 
 Once accepted, the existing strict rotation, credential-before-configuration
 checkpoint ordering, ownership watcher, bounded drain and transport-before-release
