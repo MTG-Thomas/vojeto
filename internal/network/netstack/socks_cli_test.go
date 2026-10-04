@@ -85,7 +85,10 @@ func TestFiniteSocksCLI(t *testing.T) {
 	defer func() {
 		peer.Process.Signal(syscall.SIGTERM)
 		select {
-		case <-peerDone:
+		case err := <-peerDone:
+			if err != nil {
+				t.Error("SOCKS proof peer exited uncleanly")
+			}
 		case <-time.After(3 * time.Second):
 			peer.Process.Kill()
 			<-peerDone
@@ -106,6 +109,7 @@ func TestFiniteSocksCLI(t *testing.T) {
 	policy, _ := json.Marshal(map[string]any{"listen": socksAddress, "allow": []string{"192.0.2.1:19001"}, "maxConnections": 2, "dialTimeout": "2s", "lifetime": "10s"})
 	ready := []byte(`{"overlay":[{"target":"192.0.2.1:19001","protocol":"tcp"}]}`)
 	cli := exec.Command(binaryPath, "-config", clientPath, "-socks", write("socks.json", policy), "-readiness", write("readiness.json", ready), "-health-listen", healthAddress, "-drain-timeout", "1s")
+	started := time.Now()
 	if err = cli.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -183,6 +187,9 @@ func TestFiniteSocksCLI(t *testing.T) {
 		t.Fatal("expired SOCKS session stayed open")
 	} else if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
 		t.Fatal("lifetime failed to close active session")
+	}
+	if time.Since(started) < 9*time.Second {
+		t.Fatal("active SOCKS session closed before its lifetime")
 	}
 	select {
 	case err = <-done:
