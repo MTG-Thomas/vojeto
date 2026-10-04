@@ -1,0 +1,18 @@
+--- a/pkg/tcpip/transport/tcp/snd.go
++++ b/pkg/tcpip/transport/tcp/snd.go
+@@ -347,7 +347,14 @@
+ // sendAck sends an ACK segment.
+ // +checklocks:s.ep.mu
+ func (s *sender) sendAck() {
+-	s.sendEmptySegment(header.TCPFlagAck, s.SndNxt)
++	seq := s.SndNxt
++	// With a closed peer window, only its next expected sequence can
++	// carry a pure ACK. Unacknowledged data may put SndNxt beyond that
++	// sequence and block acknowledgements in the opposite direction.
++	if s.SndWnd == 0 {
++		seq = s.SndUna
++	}
++	s.sendEmptySegment(header.TCPFlagAck, seq)
+ }
+ 
+ // updateRTO updates the retransmit timeout when a new roud-trip time is

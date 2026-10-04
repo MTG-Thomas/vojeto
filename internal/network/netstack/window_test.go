@@ -23,6 +23,15 @@ import (
 // Lose a full segment, then advertise a smaller nonzero window. Recovery must
 // transmit within that window rather than wait indefinitely for a larger one.
 func TestRetransmissionFitsSmallNonzeroWindow(t *testing.T) {
+	testSmallWindowRecovery(t, false)
+}
+
+func TestAcknowledgementFitsClosedPeerWindow(t *testing.T) {
+	testSmallWindowRecovery(t, true)
+}
+
+func testSmallWindowRecovery(t *testing.T, closedWindow bool) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	create := func(ip [4]byte) (*stack.Stack, *channel.Endpoint) {
@@ -48,6 +57,9 @@ func TestRetransmissionFitsSmallNonzeroWindow(t *testing.T) {
 	server, sl := create([4]byte{192, 0, 2, 1})
 	defer server.Close()
 	lost := make(chan struct{})
+	validACK := make(chan struct{})
+	var acknowledged atomic.Bool
+	var lostSequence, prefaceEnd atomic.Uint32
 	var dropped atomic.Bool
 	var originalSize, smallPackets atomic.Int64
 	var pumps sync.WaitGroup
@@ -68,6 +80,9 @@ func TestRetransmissionFitsSmallNonzeroWindow(t *testing.T) {
 			th := header.TCP(data[off:])
 			payload := len(data) - off - int(th.DataOffset())
 			if fromServer {
+				if payload > 0 {
+					prefaceEnd.CompareAndSwap(0, th.SequenceNumber()+uint32(payload))
+				}
 				if th.Flags()&header.TCPFlagSyn != 0 {
 					scale = header.ParseSynOptions(th.Options(), true).WS
 					if scale < 0 {
@@ -75,19 +90,31 @@ func TestRetransmissionFitsSmallNonzeroWindow(t *testing.T) {
 					}
 				}
 				if th.Flags()&header.TCPFlagSyn == 0 && dropped.Load() {
-					th.SetWindowSize(uint16(1152 >> scale))
+					window := uint16(1152 >> scale)
+					if closedWindow && !acknowledged.Load() {
+						window = 0
+					}
+					th.SetWindowSize(window)
 					th.SetChecksum(0)
 					pseudo := header.PseudoHeaderChecksum(tcp.ProtocolNumber, ip.SourceAddress(), ip.DestinationAddress(), uint16(len(data)-off))
 					th.SetChecksum(^checksum.Checksum(data[off:], pseudo))
 				}
-			} else if payload > 0 {
-				if dropped.CompareAndSwap(false, true) {
-					originalSize.Store(int64(payload))
-					close(lost)
-					continue
+			} else {
+				if closedWindow && payload == 0 && th.Flags() == header.TCPFlagAck && dropped.Load() && prefaceEnd.Load() != 0 && th.AckNumber() == prefaceEnd.Load() && th.SequenceNumber() == lostSequence.Load() {
+					if acknowledged.CompareAndSwap(false, true) {
+						close(validACK)
+					}
 				}
-				if payload <= 1152 {
-					smallPackets.Add(1)
+				if payload > 0 {
+					if dropped.CompareAndSwap(false, true) {
+						originalSize.Store(int64(payload))
+						lostSequence.Store(th.SequenceNumber())
+						close(lost)
+						continue
+					}
+					if payload <= 1152 {
+						smallPackets.Add(1)
+					}
 				}
 			}
 			incoming := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithData(data)})
@@ -124,6 +151,18 @@ func TestRetransmissionFitsSmallNonzeroWindow(t *testing.T) {
 			echoed <- err
 			return
 		}
+		if closedWindow {
+			select {
+			case <-validACK:
+			case <-ctx.Done():
+				echoed <- ctx.Err()
+				return
+			}
+			if _, err = io.WriteString(c, "+"); err != nil {
+				echoed <- err
+				return
+			}
+		}
 		data := make([]byte, 1200)
 		if _, err = io.ReadFull(c, data); err == nil {
 			_, err = c.Write(data)
@@ -148,7 +187,11 @@ func TestRetransmissionFitsSmallNonzeroWindow(t *testing.T) {
 		<-echoed
 		t.Fatal(err)
 	}
-	got := make([]byte, 1201)
+	prefix := []byte("!")
+	if closedWindow {
+		prefix = []byte("!+")
+	}
+	got := make([]byte, len(prefix)+1200)
 	_, err = io.ReadFull(c, got)
 	if err != nil {
 		cancel()
@@ -157,7 +200,7 @@ func TestRetransmissionFitsSmallNonzeroWindow(t *testing.T) {
 	if err != nil || remoteErr != nil {
 		t.Fatalf("small-window recovery failed: client=%v remote=%v original=%d smallPackets=%d timeouts=%d", err, remoteErr, originalSize.Load(), smallPackets.Load(), client.Stats().TCP.Timeouts.Value())
 	}
-	if got[0] != '!' || !bytes.Equal(got[1:], payload) {
+	if !bytes.Equal(got[:len(prefix)], prefix) || !bytes.Equal(got[len(prefix):], payload) {
 		t.Fatal("corrupted bytes")
 	}
 	if originalSize.Load() <= 1152 || smallPackets.Load() == 0 || client.Stats().TCP.Retransmits.Value() == 0 {
