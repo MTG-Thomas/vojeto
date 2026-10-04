@@ -27,11 +27,12 @@ var errControlPlane = errors.New("Defined control-plane request rejected")
 // It contains no response body, URL, credentials, or underlying error text.
 var ErrTransientPoll = errors.New("Defined read-only poll temporarily unavailable")
 
-// Client implements only the two DNClient operations needed by leased identities.
+// Client implements bounded polling, rotation and externally supplied enrollment.
 // It uses SDK public signing, key and wire types; it does not use its HTTP client.
 type Client struct {
-	http     http.Client
-	endpoint string
+	http               http.Client
+	endpoint           string
+	enrollmentEndpoint string
 }
 
 // NewClient copies the supplied HTTP client and imposes a finite request timeout
@@ -50,7 +51,9 @@ func NewClient(base string, client *http.Client) (*Client, error) {
 	}
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	u.Path = message.EndpointV1
-	return &Client{http: c, endpoint: u.String()}, nil
+	endpoint := u.String()
+	u.Path = message.EnrollEndpoint
+	return &Client{http: c, endpoint: endpoint, enrollmentEndpoint: u.String()}, nil
 }
 
 func (c *Client) request(ctx context.Context, operation string, value []byte, credentials keys.Credentials) ([]byte, error) {

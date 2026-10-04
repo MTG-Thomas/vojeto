@@ -151,3 +151,9 @@ remain release blockers; this project is not yet a production replacement.
 Leased providers may opt into finite read-only control-plane outage grace using
 `pollOutageGrace` in their provider JSON. The default stays fail-closed. This never
 covers uncertain rotation or lease loss; see [the outage policy](docs/architecture/defined-outage.md).
+
+A [fresh enrollment provider](docs/architecture/external-enrollment.md) accepts
+externally fenced one-time grants through library interfaces. It validates the
+candidate and checkpoints it before transport starts. Broker adapters and dynamic
+enrollment CLI wiring remain deployment-integration work; existing pooled CLI
+behavior is unchanged.
