@@ -7,7 +7,12 @@ RUN scripts/prepare-nebula-patch.sh /nebula-patched /src/vojeto-patched.mod
 ENV GOFLAGS=-modfile=/src/vojeto-patched.mod
 RUN go test -race ./...
 RUN CGO_ENABLED=0 go build -trimpath -o /vojeto ./cmd/vojeto
-FROM scratch
+RUN CGO_ENABLED=0 go test -c -o /netstack.test ./internal/network/netstack
+FROM scratch AS proof
+COPY --from=build /netstack.test /netstack.test
+USER 65532:65532
+ENTRYPOINT ["/netstack.test"]
+FROM scratch AS runtime
 COPY --from=build /vojeto /vojeto
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY NEBULA_LICENSE /licenses/NEBULA_LICENSE
