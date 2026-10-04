@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"time"
 )
 
 // Store adapts a configured Blob pool to Defined's secret-state store boundary.
@@ -30,7 +31,7 @@ func (s *Store) Acquire(ctx context.Context) ([]byte, error) {
 		return nil, errors.New("store acquisition already attempted")
 	}
 	s.attempted = true
-	lease, data, e := s.pool.takeAvailable(ctx, s.claimant)
+	lease, data, e := acquireAvailable(ctx, time.Second, func() (*identityLease, []byte, error) { return s.pool.takeAvailable(ctx, s.claimant) })
 	if e != nil {
 		return nil, e
 	}
@@ -75,4 +76,25 @@ func StorageToken(ctx context.Context, client *http.Client) (string, error) {
 	copyClient := *client
 	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return storageIdentityToken(ctx, &copyClient)
+}
+
+// Only confirmed lease contention is retryable. Quarantine, authentication and
+// unknown provider failures never become capacity or trigger implicit takeover.
+func acquireAvailable(ctx context.Context, interval time.Duration, take func() (*identityLease, []byte, error)) (*identityLease, []byte, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+		lease, data, err := take()
+		if !errors.Is(err, errIdentityPoolFull) {
+			return lease, data, err
+		}
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
