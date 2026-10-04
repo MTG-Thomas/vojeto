@@ -44,10 +44,14 @@ func TestResourcePeer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	// Nebula service's listener closes its accept channel unconditionally.
+	// Cancellation and deferred cleanup must not close that channel twice.
+	var listenerStop sync.Once
+	closeListener := func() { listenerStop.Do(func() { ln.Close() }) }
+	defer closeListener()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	stop := context.AfterFunc(ctx, func() { ln.Close() })
+	stop := context.AfterFunc(ctx, closeListener)
 	defer stop()
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -120,7 +124,21 @@ func TestResourceProfile(t *testing.T) {
 	if err := peer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { peer.Process.Signal(syscall.SIGTERM); peer.Wait() }()
+	peerDone := make(chan error, 1)
+	go func() { peerDone <- peer.Wait() }()
+	defer func() {
+		peer.Process.Signal(syscall.SIGTERM)
+		select {
+		case err := <-peerDone:
+			if err != nil {
+				t.Error("measurement peer exited uncleanly")
+			}
+		case <-time.After(5 * time.Second):
+			peer.Process.Kill()
+			<-peerDone
+			t.Error("measurement peer failed to stop within cleanup bound")
+		}
+	}()
 	reserve := func() string {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

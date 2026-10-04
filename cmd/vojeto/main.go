@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -26,6 +25,7 @@ func run() error {
 	config := flag.String("config", "", "secret static Nebula configuration file")
 	providerConfig := flag.String("identity-provider", "", "JSON identity-provider settings (alternative to -config)")
 	forwards := flag.String("forwards", "", "JSON array of named forwards")
+	socks := flag.String("socks", "", "opt-in finite SOCKS JSON policy (alternative to forwards)")
 	readinessFile := flag.String("readiness", "", "JSON overlay mappings and required dependency probes")
 	healthListen := flag.String("health-listen", "", "optional read-only health HTTP listener (loopback by default)")
 	publicHealth := flag.Bool("allow-public-health", false, "explicitly allow non-loopback read-only health listener")
@@ -53,15 +53,17 @@ func run() error {
 			return e
 		}
 	}
-	var entries []forward.Config
-	data, e := os.ReadFile(*forwards)
-	if e != nil || json.Unmarshal(data, &entries) != nil || len(entries) == 0 {
-		return errors.New("invalid forwards")
+	entries, socksConfig, e := loadSessions(*forwards, *socks)
+	if e != nil {
+		return e
 	}
 	settings, resolver, e := loadReadiness(*readinessFile)
 	if e != nil {
 		return e
 	}
+	completed := make(chan struct{})
+	var once sync.Once
+	complete := func() { once.Do(func() { close(completed) }) }
 	limit := forward.NewLimit(*maximum)
 	runner, e := runtime.New(provider, func(ctx context.Context, data []byte) (runtime.Transport, error) {
 		if e := ctx.Err(); e != nil {
@@ -76,6 +78,13 @@ func run() error {
 		}
 		return n, nil
 	}, func(ctx context.Context, n network.Network) ([]runtime.Session, error) {
+		if socksConfig != nil {
+			server, err := openSocksSession(ctx, n, *socksConfig, limit, complete)
+			if err != nil {
+				return nil, err
+			}
+			return []runtime.Session{server}, nil
+		}
 		var sessions []runtime.Session
 		for _, c := range entries {
 			l, e := forward.Open(ctx, n, c, limit)
@@ -110,8 +119,6 @@ func run() error {
 		defer server.Close()
 		go server.Serve(ln)
 	}
-	completed := make(chan struct{})
-	var once sync.Once
 	if *socket != "" {
 		ln, e := net.Listen("unix", *socket)
 		if e != nil {
@@ -122,7 +129,7 @@ func run() error {
 		if os.Chmod(*socket, 0600) != nil {
 			return errors.New("control permissions unavailable")
 		}
-		server := &http.Server{Handler: control.Handler(runner.Status, func() { once.Do(func() { close(completed) }) }), ReadHeaderTimeout: time.Second}
+		server := &http.Server{Handler: control.Handler(runner.Status, complete), ReadHeaderTimeout: time.Second}
 		defer server.Close()
 		go server.Serve(ln)
 	}
