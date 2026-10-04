@@ -27,8 +27,9 @@ The grant source transfers ownership of its returned grant; the provider clears
 the code field when consuming it. This does not guarantee erasure of string copies.
 
 Existing checkpoints are refused on this fresh-grant path. A caller must explicitly
-choose the pooled provider for identity reuse. There is no dynamic-grant CLI mode
-or private broker adapter yet; deployment integration remains issue #15.
+choose the pooled provider for identity reuse. The Linux CLI can connect to a caller-owned
+[local identity agent](identity-agent.md). A concrete consumer broker adapter and
+its durable ownership proof remain deployment integration work in issue #15.
 
 ## Ownership contract for the next slice
 
