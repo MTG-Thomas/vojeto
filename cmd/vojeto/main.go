@@ -46,6 +46,13 @@ func run() error {
 	if e != nil {
 		return e
 	}
+	if bounded, ok := provider.(interface {
+		ValidatePollSchedule(time.Duration, time.Duration) error
+	}); ok {
+		if e = bounded.ValidatePollSchedule(cfg.RenewInterval, cfg.RenewTimeout); e != nil {
+			return e
+		}
+	}
 	var entries []forward.Config
 	data, e := os.ReadFile(*forwards)
 	if e != nil || json.Unmarshal(data, &entries) != nil || len(entries) == 0 {

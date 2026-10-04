@@ -18,14 +18,15 @@ import (
 )
 
 type providerConfig struct {
-	Type           string   `json:"type"`
-	StorageBaseURL string   `json:"storageBaseURL"`
-	Owner          string   `json:"owner"`
-	Claimant       string   `json:"claimant"`
-	ClaimantEnv    string   `json:"claimantEnv,omitempty"`
-	HostIDs        []string `json:"hostIDs"`
-	NetworkID      string   `json:"networkID"`
-	DefinedAPI     string   `json:"definedAPI"`
+	Type            string   `json:"type"`
+	StorageBaseURL  string   `json:"storageBaseURL"`
+	Owner           string   `json:"owner"`
+	Claimant        string   `json:"claimant"`
+	ClaimantEnv     string   `json:"claimantEnv,omitempty"`
+	HostIDs         []string `json:"hostIDs"`
+	NetworkID       string   `json:"networkID"`
+	DefinedAPI      string   `json:"definedAPI"`
+	PollOutageGrace string   `json:"pollOutageGrace,omitempty"`
 }
 
 func selectProvider(staticPath, providerPath string) (identity.Provider, error) {
@@ -76,5 +77,12 @@ func selectProvider(staticPath, providerPath string) (identity.Provider, error) 
 	if e != nil {
 		return nil, e
 	}
-	return defined.NewProvider(store, dn, cfg.NetworkID)
+	var grace time.Duration
+	if cfg.PollOutageGrace != "" {
+		grace, e = time.ParseDuration(cfg.PollOutageGrace)
+		if e != nil {
+			return nil, errors.New("poll outage grace rejected")
+		}
+	}
+	return defined.NewProviderWithOptions(store, dn, cfg.NetworkID, defined.ProviderOptions{PollOutageGrace: grace})
 }
