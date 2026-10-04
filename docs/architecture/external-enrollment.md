@@ -14,12 +14,13 @@ release ownership, or persist a grant.
 `NewEnrollmentProvider` combines this client with caller-supplied `GrantSource`
 and `EnrollmentStore` implementations. The store acquires a fresh exclusive
 allocation and durably marks the attempt before the source supplies a grant.
+It snapshots the approved constraints before making any HTTP request.
 The provider validates the expected host, network and addresses, verifies inline
 certificates against their CA and the expected addresses, checks the approved
 unsafe-route fragment, and checkpoints the accepted identity before startup
 authentication. It then uses the existing provider for strict rotation and shutdown.
 The grant source transfers ownership of its returned grant; the provider clears
-the code field after submission. This does not guarantee erasure of string copies.
+the code field when consuming it. This does not guarantee erasure of string copies.
 
 Existing checkpoints are refused on this fresh-grant path. A caller must explicitly
 choose the pooled provider for identity reuse. There is no dynamic-grant CLI mode

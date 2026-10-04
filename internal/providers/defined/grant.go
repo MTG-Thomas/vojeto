@@ -78,7 +78,15 @@ func (s *grantStore) Acquire(ctx context.Context) ([]byte, error) {
 	if s.BeginEnrollment(ctx) != nil || !s.Valid() || ctx.Err() != nil {
 		return reject()
 	}
-	grant, err := s.source.AcquireGrant(ctx)
+	supplied, err := s.source.AcquireGrant(ctx)
+	var grant *EnrollmentGrant
+	if supplied != nil {
+		snapshot := *supplied
+		snapshot.Addresses = append([]string(nil), supplied.Addresses...)
+		snapshot.RoutePolicy = bytes.Clone(supplied.RoutePolicy)
+		grant = &snapshot
+		supplied.Code = ""
+	}
 	if err != nil || grant == nil || grant.HostID == "" || grant.NetworkID != s.networkID || len(grant.Addresses) == 0 || len(grant.RoutePolicy) == 0 || !s.Valid() || ctx.Err() != nil {
 		return reject()
 	}
