@@ -37,6 +37,16 @@ func (l *Limit) take() bool {
 func (l *Limit) release()    { <-l.slots }
 func (l *Limit) Active() int { return len(l.slots) }
 
+// Acquire reserves a slot without waiting. A successful reservation returns an
+// idempotent release function, so other admission surfaces can share this limit.
+func (l *Limit) Acquire() (release func(), ok bool) {
+	if !l.take() {
+		return nil, false
+	}
+	var once sync.Once
+	return func() { once.Do(l.release) }, true
+}
+
 type Listener struct {
 	listener      net.Listener
 	config        Config

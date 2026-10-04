@@ -53,10 +53,13 @@ bounded session drain. Checkpoint, synchronous transport stop, monitor join and
 release ordering are covered by cross-package tests. See [runtime semantics](leased-runtime.md).
 Recovery is fail-stop; automatic reacquisition is not implemented.
 
-Required dependency probes, resolver implementations, configurable CLI SOCKS,
-metrics, multi-architecture validation, FD/goroutine stress testing, platform deployment tests remain release gates.
+Required dependency probes and explicit name mappings are implemented; overlay
+DNS remains deferred. The finite SOCKS CLI is documented in [finite jobs](finite-socks.md).
+Metrics, runtime architecture validation, extended FD/goroutine stress testing and
+platform deployment tests remain release gates.
 
-Resource targets are unmeasured. A repeatable benchmark must record idle RSS,
-startup/identity timing, 10/100/500 sessions, sustained transfer CPU, reconnect
-latency and drain duration before documenting supported budgets. No platform
+[Repeatable Linux measurements](../measurements/2026-10-04-linux-rootless.md)
+record idle RSS, static startup, 10/100/500 sessions, sustained transfer CPU and
+drain. Real provider acquisition, reconnect latency and platform budgets still
+need measurement before documenting supported budgets. No platform
 named in the project intent is certified by these loopback Linux tests alone.

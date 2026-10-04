@@ -118,7 +118,9 @@ identity pool, or a caller-owned
 [local enrollment agent](docs/architecture/identity-agent.md) on Linux.
 Forwarding targets may use numeric IPv4 or names explicitly
 mapped in the readiness configuration. Unmapped names fail closed. It never falls back to host dialing or modifies system DNS.
-The allowlisted finite SOCKS library is opt-in and is not enabled by the CLI.
+The opt-in [finite SOCKS CLI](docs/architecture/finite-socks.md) uses `-socks`
+as an alternative to `-forwards`. Its explicit lifetime completes the portable
+runtime; listeners and destinations retain the library's narrow security policy.
 Defined checkpoint/rotation and Azure lease ownership now run through the portable
 runtime. Lease loss closes admission and active sessions; uncertain credential
 updates leave the identity quarantined. No automatic takeover or reacquisition
