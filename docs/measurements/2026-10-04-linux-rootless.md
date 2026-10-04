@@ -96,3 +96,23 @@ packet reordering in both directions using the production TCP stack configuratio
 They compare every returned byte and join connection writers, echo handlers, and
 packet pumps. Passing these isolated regressions does not replace the encrypted
 load test or prove the deployed concurrency budget.
+
+## Zero-pipe tail-probe timer correction
+
+A bounded controlled tail-loss trace reproduced a sender with 3,600 unacknowledged
+bytes and zero packets in its pipe estimate. After its tail probe, retransmission
+was not armed. The checksum-verified gVisor patch described in
+[the TCP recovery design](../architecture/tcp-recovery.md) corrects that timer gate
+without changing retransmission durations or congestion control. A direct
+regression fails on the pinned original and passes with the patch. Ten
+instrumented tail-loss race runs and ten uninstrumented race runs of all four
+fault modes passed after the correction. The full race suite and standard
+container race/vet gates also passed; temporary probes were removed.
+
+Twenty further encrypted load runs with the same workload, deadlines, one CPU,
+512 MiB shared allowance and rootless restrictions passed nineteen times. One
+stream still stalled at 1,620,032 of 8,388,608 echoed bytes while the other nine
+completed. No OOM was recorded. This establishes an independent timer correction,
+not a complete fix for encrypted load recovery. Issue #14 remains open and
+production replacement remains gated. A passing CI sample cannot supersede that
+failed acceptance run.
