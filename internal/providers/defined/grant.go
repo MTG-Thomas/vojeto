@@ -44,6 +44,9 @@ type GrantSource interface {
 type EnrollmentStore interface {
 	StateStore
 	BeginEnrollment(context.Context) error
+	// BindEnrollment must durably associate this owner with the exact host/network
+	// and refuse a host whose prior owner is active or uncertain. No code is passed.
+	BindEnrollment(context.Context, string, string) error
 }
 
 type EnrollmentClient interface {
@@ -111,6 +114,9 @@ func (s *grantStore) Acquire(ctx context.Context) ([]byte, error) {
 		if !prefix.IsValid() {
 			return reject()
 		}
+	}
+	if s.BindEnrollment(ctx, grant.HostID, grant.NetworkID) != nil || !s.Valid() || ctx.Err() != nil {
+		return reject()
 	}
 	data, key, credentials, meta, err := s.client.Enroll(ctx, grant.Code, s.hostname)
 	grant.Code = ""

@@ -14,7 +14,9 @@ release ownership, or persist a grant.
 `NewEnrollmentProvider` combines this client with caller-supplied `GrantSource`
 and `EnrollmentStore` implementations. The store acquires a fresh exclusive
 allocation and durably marks the attempt before the source supplies a grant.
-It snapshots the approved constraints before making any HTTP request.
+It snapshots the approved constraints before making any HTTP request. The store
+then binds its fenced owner to the grant's actual host and network before the
+one-time code is submitted.
 The provider validates the expected host and network and either exact caller-
 approved addresses or caller-approved address ranges. Both constraints apply
 when both are supplied; neither defaults to an unrestricted policy. It verifies inline
@@ -50,6 +52,12 @@ on the next acquisition. The persistence adapter must represent this distinction
 explicitly: `BeginEnrollment` must durably prevent retry after an uncertain attempt,
 and `Acquire` must reject unclean or uncertain allocations after restart. An
 adapter that cannot provide that fencing must not implement `EnrollmentStore`.
+`BindEnrollment` must durably associate this owner with the exact host and network
+returned by the source. It must reject an active or uncertain prior overlay owner.
+A one-time code, a new boot nonce or a lease on an unrelated allocation record does
+not establish that host-specific exclusion. The source and store cannot silently
+refer to different allocations. Host reuse requires caller-owned evidence that
+the prior transport has stopped; platform-specific proof belongs in the adapter.
 
 Some issuers return a host ID before the assigned address is known. A source may
 supply `AddressRanges` instead of exact `Addresses`, using the caller's configured

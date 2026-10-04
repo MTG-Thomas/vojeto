@@ -22,9 +22,14 @@ func (f grantSourceFunc) AcquireGrant(ctx context.Context) (*EnrollmentGrant, er
 
 type grantTestStore struct {
 	testStore
-	begins   int
-	beginErr error
-	lost     chan struct{}
+	begins                        int
+	beginErr                      error
+	lost                          chan struct{}
+	binds                         int
+	boundHost, boundNetwork       string
+	expectedHost, expectedNetwork string
+	bindErr                       error
+	revokeOnBind                  bool
 }
 
 func (s *grantTestStore) Watch(ctx context.Context, revoke func()) error {
@@ -39,6 +44,21 @@ func (s *grantTestStore) Watch(ctx context.Context, revoke func()) error {
 		revoke()
 		return errors.New("ownership lost")
 	}
+}
+
+func (s *grantTestStore) BindEnrollment(_ context.Context, host, network string) error {
+	s.binds++
+	if s.revokeOnBind {
+		s.valid.Store(false)
+	}
+	if s.bindErr != nil {
+		return s.bindErr
+	}
+	if host != s.expectedHost || network != s.expectedNetwork {
+		return errors.New("allocation binding rejected")
+	}
+	s.boundHost, s.boundNetwork = host, network
+	return nil
 }
 
 func (s *grantTestStore) BeginEnrollment(context.Context) error { s.begins++; return s.beginErr }
@@ -66,9 +86,12 @@ func grantFixture(t *testing.T) (*Provider, *grantTestStore, *grantTestClient, *
 	}
 	key := []byte(cfg["pki"].(map[string]any)["key"].(string))
 	grant := &EnrollmentGrant{Code: "fixture-code", HostID: state.HostID, NetworkID: "network-FIXTURE", Addresses: state.Addresses, RoutePolicy: []byte("{}")}
-	store := &grantTestStore{}
+	store := &grantTestStore{expectedHost: state.HostID, expectedNetwork: "network-FIXTURE"}
 	client := &grantTestClient{scriptClient: scriptClient{fakePooledDN: dn, check: func(context.Context) (bool, error) { return false, nil }}}
 	client.enroll = func(context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+		if store.binds != 1 || store.boundHost != state.HostID || store.boundNetwork != "network-FIXTURE" {
+			t.Error("code submitted before durable host/network binding")
+		}
 		return state.Config, key, credentials, dn.meta, nil
 	}
 	source := grantSourceFunc(func(context.Context) (*EnrollmentGrant, error) {
@@ -271,5 +294,29 @@ func TestGrantOwnershipLossClosesActiveForwardWithoutRelease(t *testing.T) {
 	}
 	if limit.Active() != 0 || store.releaseCalls != 0 || p.Valid() || runner.Status().IdentityValid {
 		t.Fatal("lost owner leaked or became reusable")
+	}
+}
+
+func TestGrantStoreBindsActualHostBeforeCodeSubmission(t *testing.T) {
+	for _, kind := range []string{"foreign host", "foreign network", "uncertain binding", "ownership lost during binding"} {
+		t.Run(kind, func(t *testing.T) {
+			p, store, client, grant := grantFixture(t)
+			switch kind {
+			case "foreign host":
+				grant.HostID = "host-OTHER"
+			case "foreign network":
+				store.expectedNetwork = "network-OTHER"
+			case "uncertain binding":
+				store.bindErr = context.DeadlineExceeded
+			case "ownership lost during binding":
+				store.revokeOnBind = true
+			}
+			if _, err := p.Acquire(context.Background()); err == nil || store.binds != 1 || client.enrollCalls != 0 || len(store.saves) != 0 || store.releaseCalls != 0 {
+				t.Fatal("unbound or uncertain host grant submitted")
+			}
+			if _, err := p.Acquire(context.Background()); err == nil || store.binds != 1 || client.enrollCalls != 0 {
+				t.Fatal("uncertain binding retried")
+			}
+		})
 	}
 }
