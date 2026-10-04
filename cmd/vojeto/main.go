@@ -36,11 +36,11 @@ func run() error {
 	flag.DurationVar(&cfg.RenewInterval, "renew-interval", cfg.RenewInterval, "credential poll interval")
 	flag.DurationVar(&cfg.RenewTimeout, "renew-timeout", cfg.RenewTimeout, "credential update bound")
 	flag.DurationVar(&cfg.CleanupTimeout, "cleanup-timeout", cfg.CleanupTimeout, "checkpoint/release cleanup bound")
-	signalGrace := flag.Duration("signal-grace", 0, "native application drain allowance before stopping admission (0 to 5m)")
+	signalGrace := flag.Duration("signal-grace", 0, "native application drain allowance before stopping admission (0 disables)")
 	socket := flag.String("control-socket", "", "optional Unix control socket in a private writable directory")
 	flag.Parse()
-	if *maximum < 1 || *signalGrace < 0 || *signalGrace > 5*time.Minute {
-		return errors.New("invalid connection limit")
+	if err := validateAdmission(*maximum, *signalGrace); err != nil {
+		return err
 	}
 	provider, e := selectProvider(*config, *providerConfig)
 	if e != nil {

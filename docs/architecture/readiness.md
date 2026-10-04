@@ -44,7 +44,9 @@ SIGTERM/SIGINT normally stop admission and begin bounded drain immediately.
 `-signal-grace 150s`, for example, withdraws readiness while keeping the transport,
 identity ownership watcher, rotation, and listeners available to applications
 performing native shutdown work, including new database connections. The allowance
-is bounded to five minutes and defaults to zero. Explicit completion interrupts
+is an explicit finite duration and defaults to zero. Configure it to fit the
+consumer's outer termination budget together with connection drain and cleanup.
+Explicit completion interrupts
 that allowance and stops accepting sessions immediately. Identity loss interrupts
 it and quarantines ownership. Deployment-specific grace choices and native worker
 completion wiring belong in the infrastructure repository.
