@@ -82,5 +82,8 @@ The production-stack regression loses a segment and closes the advertised peer
 window. The peer reopens only after an ACK arrives at the expected sequence.
 The test verifies exact bidirectional bytes, smaller retransmission and bounded
 cleanup. It failed three times before the correction and passed ten times under
-the race detector afterward. Encrypted load evidence must still be collected from
-a clean build without diagnostic hooks before production acceptance.
+the race detector afterward. Both window regressions subsequently passed 100
+runs with the race detector. Ten instrumented and twenty clean original encrypted
+load runs passed after both corrections, and source CI passed. Issue #14 is closed
+for the reproduced recovery defects. See [the measurement record](../measurements/2026-10-04-linux-rootless.md)
+for workload, observed ranges and limits; live deployment acceptance remains separate.
