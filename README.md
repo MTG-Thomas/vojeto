@@ -86,7 +86,10 @@ Vojeto defaults to the narrowest useful behavior:
 ## Status
 
 An initial runnable extraction is available. Build with `make build`, verify with
-`make test` (race detector), or build the non-root container with `docker build .`.
+`make test` (race detector), or build a local non-root development container with
+`docker build .`. Publication uses `docker build --target release .`, which
+collects the complete linked-license bundle and rejects missing licenses;
+that target currently stops on the unresolved Defined SDK license.
 The build applies checksum-verified Nebula v1.11.2 patches for packet-cache
 concurrency and rootless socket-buffer configuration, plus a gVisor retransmission
 timer patch, in isolated dependency copies. Plain `go test ./...` does not apply

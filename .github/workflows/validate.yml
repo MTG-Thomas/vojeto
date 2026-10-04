@@ -16,6 +16,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: License inventory regressions
+        run: python3 -m unittest discover -s scripts -p test_dependency_notices.py -v
       - name: Race tests, patched upstream regression and native compilation
         run: docker build --target proof --tag vojeto-proof .
       - name: Rootless encrypted overlay proof
