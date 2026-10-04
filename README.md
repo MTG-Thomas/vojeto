@@ -72,7 +72,7 @@ Vojeto defaults to the narrowest useful behavior:
 - no root requirement;
 - no `NET_ADMIN`;
 - no TUN device;
-- listeners bind to loopback unless deliberately configured otherwise;
+- listeners require explicit loopback addresses;
 - SOCKS is opt-in;
 - SOCKS destinations are explicitly allowlisted;
 - TCP CONNECT only initially;
@@ -82,9 +82,41 @@ Vojeto defaults to the narrowest useful behavior:
 
 ## Status
 
-Early extraction and generalization.
+An initial runnable extraction is available. Build with `make build`, verify with
+`make test` (race detector), or build the non-root container with `docker build .`.
+The build applies a checksum-verified Nebula v1.11.2 packet-cache concurrency patch
+in an isolated dependency copy. Plain `go test ./...` does not apply that patch.
 
-The current implementation lives in the BiFrost infrastructure repository under `tools/nebula-userspace-proof`. Vojeto will absorb that proven code in small, reviewable steps rather than rewriting the prototype from scratch.
+Run `./vojeto -config /private/nebula.yaml -forwards /private/forwards.json`.
+Configuration contains credentials and must remain private. Forward JSON is an array:
+
+```json
+[{"Name":"database","Listen":"127.0.0.1:15432","Target":"192.0.2.10:5432","MaxConnections":32,"DialTimeout":15000000000}]
+```
+
+Durations are currently JSON nanoseconds. Global connections default to 128;
+`-drain-timeout` defaults to 30 seconds. SIGTERM/SIGINT stop admission and drain.
+An optional `-control-socket /private/control.sock` enables permission-0600 Unix
+control: `POST /v1/lifecycle/complete` performs the same bounded shutdown.
+Use a private parent directory to prevent cross-user socket replacement.
+
+This CLI currently uses static Nebula configuration and numeric IPv4 targets.
+An explicit resolver abstraction exists; hostnames fail closed until a resolver
+is supplied. It never falls back to host dialing or modifies system DNS.
+The allowlisted finite SOCKS library is opt-in and is not enabled by the CLI.
+Defined credential checkpoint/rotation and configurable Azure lease primitives
+are extracted with their tests, but their runtime provider integration is pending.
+
+`/live`, `/ready`, and `/status` are available through the control socket. Readiness
+remains false until overlay/dependency probes are integrated; process startup is
+not proof of overlay connectivity. Status contains only bounded health fields.
+
+Container runtime: UID 65532, `--cap-drop ALL --read-only --security-opt
+no-new-privileges`, no TUN device. Mount secret config read-only; mount a small
+private writable directory only if using a control socket. No platform-specific
+support or 64/128/256 MiB memory target is claimed yet.
+
+See [extraction boundaries and compatibility](docs/architecture/extraction.md).
 
 ## License
 
