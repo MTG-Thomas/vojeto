@@ -30,7 +30,7 @@ func (f fakePooledDN) DoUpdate(context.Context, keys.Credentials) ([]byte, []byt
 
 func pooledRenewalFixture(t *testing.T) (*identityState, *keys.Credentials, fakePooledDN) {
 	t.Helper()
-	ca, _, signing, _ := cert_test.NewTestCaCert(cert.Version2, cert.Curve_CURVE25519, time.Now().Add(-time.Minute), time.Now().Add(time.Hour), nil, nil, nil)
+	ca, _, signing, _ := cert_test.NewTestCaCert(cert.Version2, cert.Curve_CURVE25519, time.Now().Add(-time.Minute), time.Now().Add(2*time.Hour), nil, nil, nil)
 	caPEM, err := ca.MarshalPEM()
 	if err != nil {
 		t.Fatal("CA fixture failed")

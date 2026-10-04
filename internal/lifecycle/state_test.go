@@ -46,3 +46,15 @@ func TestLeaseLossNotReady(t *testing.T) {
 		t.Fatal("ambiguous ownership resumed")
 	}
 }
+
+func TestFailedCheckpointStopsTransportAndFlushes(t *testing.T) {
+	m := New()
+	var calls []string
+	ok := func(s string) func(context.Context) error {
+		return func(context.Context) error { calls = append(calls, s); return nil }
+	}
+	h := Hooks{func() {}, ok("drain"), func(context.Context) error { calls = append(calls, "checkpoint"); return errors.New("failed") }, ok("stop"), ok("release"), ok("flush")}
+	if m.Complete(context.Background(), h) == nil || !reflect.DeepEqual(calls, []string{"drain", "checkpoint", "stop", "flush"}) {
+		t.Fatal("failure skipped transport cleanup or diagnostics", calls)
+	}
+}

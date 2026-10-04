@@ -283,3 +283,46 @@ func TestIdentityPoolAllQuarantinedFailsWithoutReauthorizingHost(t *testing.T) {
 		t.Fatal("unclean expired owner was reused or treated as temporary capacity")
 	}
 }
+
+func TestLeaseMonitorCancellationJoinsRenewalWithoutRevocation(t *testing.T) {
+	entered := make(chan struct{})
+	joined := make(chan struct{})
+	client := &http.Client{Transport: poolRoundTrip(func(r *http.Request) (*http.Response, error) {
+		close(entered)
+		<-r.Context().Done()
+		time.Sleep(5 * time.Millisecond)
+		close(joined)
+		return nil, r.Context().Err()
+	})}
+	pool, e := NewPool(client, func(context.Context) (string, error) { return "fixture", nil }, "example", []string{"host-FIRST"}, "https://state.example.invalid/identities")
+	if e != nil {
+		t.Fatal(e)
+	}
+	lease := &identityLease{pool: pool, slot: 1, id: "fixture", validUntil: time.Now().Add(time.Minute)}
+	var revoked atomic.Bool
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- lease.maintainIntervals(ctx, func() { revoked.Store(true) }, time.Millisecond, 2*time.Millisecond)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("renewal missing")
+	}
+	cancel()
+	select {
+	case e := <-done:
+		if e != nil || revoked.Load() {
+			t.Fatal("cancelled monitor revoked clean transport", e)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("monitor did not join")
+	}
+	select {
+	case <-joined:
+	default:
+		t.Fatal("renewal leaked beyond monitor exit")
+	}
+}
