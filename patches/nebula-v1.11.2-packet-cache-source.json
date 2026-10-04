@@ -1,0 +1,7 @@
+{
+  "module": "github.com/slackhq/nebula",
+  "version": "v1.11.2",
+  "originalHandshakeManagerSHA256": "afd89918eea7af4b41a12c16908de18f52370596cbec556e5832b99220f610f1",
+  "patchSHA256": "e87cf44c0da58696dde449c5295cee91fee2cd2d2459ffeb5dae2f14e34f86e3",
+  "scope": "Vojeto Nebula dependency; packet-cache concurrent ownership fix extracted with MIT notice"
+}
