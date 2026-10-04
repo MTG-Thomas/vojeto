@@ -6,6 +6,7 @@ COPY . .
 RUN scripts/prepare-nebula-patch.sh /nebula-patched /src/vojeto-patched.mod
 ENV GOFLAGS=-modfile=/src/vojeto-patched.mod
 RUN cd /nebula-patched && GOFLAGS= go test -race -run '^TestPacketCacheConcurrentCountAndTransfer$' -count=100 -timeout=2m .
+RUN go test -race -run "^TestVojetoTailProbe" -count=100 gvisor.dev/gvisor/pkg/tcpip/transport/tcp
 RUN go test -race -timeout=4m ./...
 RUN go vet ./...
 RUN go list -deps ./... > /tmp/deps && ! grep -q '^golang.org/x/crypto/openpgp' /tmp/deps
@@ -25,6 +26,7 @@ ENV GOMEMLIMIT=96MiB
 COPY --from=build /vojeto /vojeto
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY NEBULA_LICENSE /licenses/NEBULA_LICENSE
+COPY GVISOR_LICENSE /licenses/GVISOR_LICENSE
 COPY LICENSE /licenses/VOJETO_LICENSE
 COPY THIRD_PARTY_NOTICES.md /licenses/THIRD_PARTY_NOTICES.md
 USER 65532:65532

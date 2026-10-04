@@ -24,3 +24,5 @@ rootless_patch=$(pwd)/patches/nebula-v1.11.2-rootless-buffers.patch
 cp go.mod "$alternate"
 cp go.sum "${alternate%.mod}.sum"
 go mod edit -modfile="$alternate" -replace="github.com/slackhq/nebula=$destination"
+
+scripts/prepare-gvisor-patch.sh "${destination}-gvisor" "$alternate"

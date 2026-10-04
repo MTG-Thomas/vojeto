@@ -1,0 +1,60 @@
+--- a/pkg/tcpip/transport/tcp/snd.go
++++ b/pkg/tcpip/transport/tcp/snd.go
+@@ -970,11 +970,9 @@
+ 			s.schedulePTO()
+ 		} else if !s.resendTimer.enabled() {
+ 			s.probeTimer.disable()
+-			if s.Outstanding > 0 {
+-				// Enable the resend timer if it's not enabled yet and there is
+-				// outstanding data.
+-				s.resendTimer.enable(s.RTO)
+-			}
++			// SndUna != SndNxt above proves unacknowledged sequence data.
++			// Pipe accounting may be zero after loss; recovery must still run.
++			s.resendTimer.enable(s.RTO)
+ 		}
+ 	}
+ }
+--- /dev/null
++++ b/pkg/tcpip/transport/tcp/vojeto_timer_test.go
+@@ -0,0 +1,40 @@
++// Copyright 2026 The Vojeto Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++package tcp
++
++import (
++	"gvisor.dev/gvisor/pkg/tcpip"
++	"gvisor.dev/gvisor/pkg/tcpip/seqnum"
++	"testing"
++	"time"
++)
++
++func TestVojetoTailProbeArmsRetransmissionWithZeroPipe(t *testing.T) {
++	s := sender{}
++	s.SndUna, s.SndNxt = seqnum.Value(100), seqnum.Value(3700)
++	s.Outstanding, s.SndWnd, s.RTO = 0, 65536, 200*time.Millisecond
++	clock := tcpip.NewStdClock()
++	s.resendTimer.init(clock, func() {})
++	s.probeTimer.init(clock, func() {})
++	defer s.resendTimer.cleanup()
++	defer s.probeTimer.cleanup()
++	s.postXmit(false, false)
++	if !s.resendTimer.enabled() {
++		t.Fatal("unacknowledged data has no retransmission timer after tail probe")
++	}
++	if s.probeTimer.enabled() {
++		t.Fatal("tail probe was rescheduled instead of retransmission")
++	}
++}
