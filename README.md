@@ -137,3 +137,8 @@ Repeatable local resource measurements and their limits are documented in
 The image defaults to `GOMEMLIMIT=96MiB`; this soft runtime limit does not guarantee
 RSS or prove a platform memory budget. Production publication waits for the
 Defined SDK license clarification in [dnapi#52](https://github.com/DefinedNet/dnapi/issues/52).
+
+Defined identity requests use a [bounded HTTP adapter](docs/architecture/defined-client.md)
+with redirect rejection, a 30-second request ceiling and a 2 MiB response limit.
+Polling failures remain fail-closed. SDK licensing and live deployment acceptance
+remain release blockers; this project is not yet a production replacement.

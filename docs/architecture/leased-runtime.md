@@ -18,7 +18,7 @@ reacquisition, lease break or quarantine clearing.
 Polling/rotation remains serialized. Credentials are checkpointed before route,
 network or identity checks; accepted config is checkpointed before transport reload.
 Any uncertain update or reload stops the runtime and leaves an active tombstone.
-The initial policy also stops on a failed SDK poll; future transient-outage policy
+The policy also stops on a failed poll; future transient-outage policy
 needs specific authenticated evidence rather than treating all failures as safe.
 
 Completion stops admission and cancels/joins SDK work while the lease watchdog
@@ -97,3 +97,7 @@ intervals within the caller's startup deadline. Authentication, unknown conflict
 and quarantined state fail immediately. Set `-acquire-timeout` to the declared
 startup budget; the default remains 30 seconds. No lease breaks or pool expansion
 occur automatically.
+
+Defined requests use the [bounded HTTP adapter](defined-client.md): redirects are
+rejected, requests are limited to 30 seconds, and response bodies to 2 MiB.
+The supplied runtime renewal timeout can impose a shorter deadline.
