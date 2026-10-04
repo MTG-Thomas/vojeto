@@ -121,6 +121,9 @@ type Network struct {
 	writer  *io.PipeWriter
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
+	mu      sync.Mutex
+	closed  bool
+	config  *config.C
 }
 
 func newOutboundNetwork(control *nebula.Control, d *routedDevice) (*Network, error) {
@@ -196,6 +199,12 @@ func (s *Network) DialContext(ctx context.Context, network, address string) (net
 	return gonet.DialContextTCP(ctx, s.ipstack, tcpip.FullAddress{NIC: 1, Addr: tcpip.AddrFrom4(a.Addr().As4()), Port: a.Port()}, ipv4.ProtocolNumber)
 }
 func (s *Network) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
 	s.cancel()
 	s.reader.Close()
 	s.writer.Close()
@@ -233,6 +242,7 @@ func startReloadable(data []byte, loaded **config.C) (*Network, error) {
 		ctrl.Stop()
 		return nil, errors.New("userspace service initialization failed")
 	}
+	svc.config = &cfg
 	return svc, nil
 }
 
@@ -262,4 +272,14 @@ func reloadManagedConfig(current *config.C, data []byte, logger *slog.Logger) er
 		return errors.New("invalid identity update")
 	}
 	return current.ReloadConfigString(string(data))
+}
+
+// Reload applies checkpointed identity configuration. Routes remain immutable.
+func (s *Network) Reload(data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return errors.New("overlay stopped")
+	}
+	return reloadManagedConfig(s.config, data, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }

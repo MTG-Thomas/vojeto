@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"github.com/MTG-Thomas/vojeto/internal/control"
 	"github.com/MTG-Thomas/vojeto/internal/forward"
-	"github.com/MTG-Thomas/vojeto/internal/lifecycle"
+	"github.com/MTG-Thomas/vojeto/internal/network"
 	"github.com/MTG-Thomas/vojeto/internal/network/netstack"
-	"github.com/MTG-Thomas/vojeto/internal/providers/static"
+	"github.com/MTG-Thomas/vojeto/internal/runtime"
 	"net"
 	"net/http"
 	"os"
@@ -21,55 +21,52 @@ import (
 )
 
 func run() error {
-	config := flag.String("config", "", "secret Nebula configuration file")
+	config := flag.String("config", "", "secret static Nebula configuration file")
+	providerConfig := flag.String("identity-provider", "", "JSON identity-provider settings (alternative to -config)")
 	forwards := flag.String("forwards", "", "JSON array of named forwards")
 	maximum := flag.Int("max-connections", 128, "global session ceiling")
-	drain := flag.Duration("drain-timeout", 30*time.Second, "shutdown drain bound")
+	cfg := runtime.DefaultConfig()
+	flag.DurationVar(&cfg.DrainTimeout, "drain-timeout", cfg.DrainTimeout, "shutdown drain bound")
+	flag.DurationVar(&cfg.AcquireTimeout, "acquire-timeout", cfg.AcquireTimeout, "identity/startup bound")
+	flag.DurationVar(&cfg.RenewInterval, "renew-interval", cfg.RenewInterval, "credential poll interval")
+	flag.DurationVar(&cfg.RenewTimeout, "renew-timeout", cfg.RenewTimeout, "credential update bound")
+	flag.DurationVar(&cfg.CleanupTimeout, "cleanup-timeout", cfg.CleanupTimeout, "checkpoint/release cleanup bound")
 	socket := flag.String("control-socket", "", "optional Unix control socket in a private writable directory")
 	flag.Parse()
-	if *maximum < 1 || *drain <= 0 {
-		return errors.New("invalid limits")
+	if *maximum < 1 {
+		return errors.New("invalid connection limit")
 	}
-	provider := static.Provider{Path: *config}
-	current, e := provider.Acquire(context.Background())
-	if e != nil {
-		return errors.New("configuration unavailable")
-	}
-	var entries []forward.Config
-	dataForwards, e := os.ReadFile(*forwards)
-	if e != nil || json.Unmarshal(dataForwards, &entries) != nil || len(entries) == 0 {
-		return errors.New("invalid forwards")
-	}
-	n, e := netstack.Open(current.Config)
+	provider, e := selectProvider(*config, *providerConfig)
 	if e != nil {
 		return e
 	}
-	var closeOnce sync.Once
-	closeNetwork := func() { closeOnce.Do(func() { n.Close() }) }
-	defer closeNetwork()
-	manager := lifecycle.New()
-	manager.Transition(lifecycle.AcquiringIdentity)
-	manager.Transition(lifecycle.Connecting)
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	var entries []forward.Config
+	data, e := os.ReadFile(*forwards)
+	if e != nil || json.Unmarshal(data, &entries) != nil || len(entries) == 0 {
+		return errors.New("invalid forwards")
+	}
 	limit := forward.NewLimit(*maximum)
-	var listeners []*forward.Listener
-	defer func() {
-		for _, l := range listeners {
-			d, c := context.WithTimeout(context.Background(), *drain)
-			l.Drain(d)
-			c()
+	runner, e := runtime.New(provider, func(ctx context.Context, data []byte) (runtime.Transport, error) {
+		if e := ctx.Err(); e != nil {
+			return nil, e
 		}
-	}()
-	for _, c := range entries {
-		l, e := forward.Open(context.Background(), n, c, limit)
-		if e != nil {
-			return errors.New("forward initialization failed")
+		return netstack.Open(data)
+	}, func(ctx context.Context, n network.Network) ([]runtime.Session, error) {
+		var sessions []runtime.Session
+		for _, c := range entries {
+			l, e := forward.Open(ctx, n, c, limit)
+			if e != nil {
+				return sessions, e
+			}
+			sessions = append(sessions, l)
 		}
-		listeners = append(listeners, l)
+		return sessions, nil
+	}, cfg)
+	if e != nil {
+		return e
 	}
 	completed := make(chan struct{})
-	var completeOnce sync.Once
+	var once sync.Once
 	if *socket != "" {
 		ln, e := net.Listen("unix", *socket)
 		if e != nil {
@@ -80,31 +77,13 @@ func run() error {
 		if os.Chmod(*socket, 0600) != nil {
 			return errors.New("control permissions unavailable")
 		}
-		srv := &http.Server{Handler: control.Handler(func() control.Status { return control.Status{State: string(manager.State()), IdentityValid: true} }, func() { completeOnce.Do(func() { close(completed) }) }), ReadHeaderTimeout: time.Second}
-		defer srv.Close()
-		go srv.Serve(ln)
+		server := &http.Server{Handler: control.Handler(runner.Status, func() { once.Do(func() { close(completed) }) }), ReadHeaderTimeout: time.Second}
+		defer server.Close()
+		go server.Serve(ln)
 	}
-	// Overlay health is intentionally unconfirmed until independent dependency probes exist.
-	select {
-	case <-ctx.Done():
-	case <-completed:
-	}
-	noOp := func(context.Context) error { return nil }
-	finish, cancel := context.WithTimeout(context.Background(), *drain)
-	defer cancel()
-	return manager.Complete(finish, lifecycle.Hooks{StopAccepting: func() {
-		for _, l := range listeners {
-			l.StopAccepting()
-		}
-	}, Drain: func(ctx context.Context) error {
-		var result error
-		for _, l := range listeners {
-			if e := l.Drain(ctx); e != nil {
-				result = e
-			}
-		}
-		return result
-	}, Checkpoint: func(ctx context.Context) error { return provider.Checkpoint(ctx, current) }, StopTransport: func(context.Context) error { closeNetwork(); return nil }, Release: func(ctx context.Context) error { return provider.Release(ctx, current) }, Flush: noOp})
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	return runner.Run(ctx, completed)
 }
 func main() {
 	if run() != nil {

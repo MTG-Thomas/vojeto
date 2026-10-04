@@ -35,7 +35,13 @@ func (m *Manager) State() State { m.mu.Lock(); defer m.mu.Unlock(); return m.sta
 func (m *Manager) Transition(next State) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	valid := map[State][]State{Starting: {AcquiringIdentity, Draining}, AcquiringIdentity: {Connecting, Draining, LeaseLost}, Connecting: {Ready, Draining, LeaseLost}, Ready: {Reconnecting, Rotating, Draining, LeaseLost}, Reconnecting: {Ready, Draining, LeaseLost}, Rotating: {Ready, Draining, LeaseLost}, LeaseLost: {NotReady}, NotReady: {Draining}, Draining: {ReleasingIdentity}, ReleasingIdentity: {Stopped}}
+	valid := map[State][]State{
+		Starting: {AcquiringIdentity, Draining, NotReady}, AcquiringIdentity: {Connecting, Draining, LeaseLost, NotReady},
+		Connecting: {Ready, Draining, LeaseLost, NotReady}, Ready: {Reconnecting, Rotating, Draining, LeaseLost, NotReady},
+		Reconnecting: {Ready, Draining, LeaseLost, NotReady}, Rotating: {Ready, Draining, LeaseLost, NotReady},
+		Draining: {ReleasingIdentity, LeaseLost, NotReady}, ReleasingIdentity: {Stopped, LeaseLost, NotReady},
+		LeaseLost: {NotReady}, NotReady: {Draining, Stopped},
+	}
 	for _, s := range valid[m.state] {
 		if s == next {
 			m.state = next
@@ -50,29 +56,32 @@ type Hooks struct {
 	Drain, Checkpoint, StopTransport, Release, Flush func(context.Context) error
 }
 
-// Complete is idempotent. A failed checkpoint/transport stop never releases ownership.
+// Complete is idempotent. Transport stops even when checkpoint fails, and diagnostics
+// flush on every exit. Failure never permits exclusive ownership release.
 func (m *Manager) Complete(ctx context.Context, h Hooks) error {
 	m.complete.Do(func() {
-		if m.err = m.Transition(Draining); m.err != nil {
-			return
-		}
+		defer func() { m.err = errors.Join(m.err, h.Flush(ctx)) }()
+		transitionErr := m.Transition(Draining)
 		h.StopAccepting()
 		drainErr := h.Drain(ctx)
-		if m.err = h.Checkpoint(ctx); m.err != nil {
+		checkpointErr := h.Checkpoint(ctx)
+		stopErr := h.StopTransport(ctx)
+		if transitionErr != nil || checkpointErr != nil || stopErr != nil {
+			m.err = errors.Join(transitionErr, drainErr, checkpointErr, stopErr)
 			return
 		}
-		if m.err = h.StopTransport(ctx); m.err != nil {
+		// A bounded forced drain is clean once all sessions and transport are joined.
+		if drainErr != nil && !errors.Is(drainErr, context.DeadlineExceeded) {
+			m.err = drainErr
 			return
 		}
-		m.Transition(ReleasingIdentity)
+		if m.err = m.Transition(ReleasingIdentity); m.err != nil {
+			return
+		}
 		if m.err = h.Release(ctx); m.err != nil {
 			return
 		}
-		if m.err = h.Flush(ctx); m.err != nil {
-			return
-		}
-		m.Transition(Stopped)
-		m.err = drainErr
+		m.err = m.Transition(Stopped)
 	})
 	return m.err
 }

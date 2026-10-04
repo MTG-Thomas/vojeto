@@ -294,29 +294,43 @@ func (l *identityLease) release(ctx context.Context) error {
 // Watchdog is independent of HTTP renewal. A stalled request cannot keep an
 // expired host identity running. stopTransport must synchronously close Nebula.
 func (l *identityLease) maintain(ctx context.Context, stopTransport func()) error {
-	ticks := time.NewTicker(time.Second)
+	return l.maintainIntervals(ctx, stopTransport, time.Second, 10*time.Second)
+}
+func (l *identityLease) maintainIntervals(ctx context.Context, stopTransport func(), watchInterval, renewInterval time.Duration) error {
+	ticks := time.NewTicker(watchInterval)
 	defer ticks.Stop()
-	renewals := time.NewTicker(10 * time.Second)
+	renewals := time.NewTicker(renewInterval)
 	defer renewals.Stop()
 	results := make(chan error, 1)
 	pending := false
 	renewCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	var pendingRenewal sync.WaitGroup
+	defer func() { cancel(); pendingRenewal.Wait() }()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticks.C:
+			if ctx.Err() != nil {
+				return nil
+			}
 			if l.remaining() <= 0 {
 				stopTransport()
 				return errors.New("identity lease ownership expired")
 			}
 		case <-renewals.C:
+			if ctx.Err() != nil {
+				return nil
+			}
 			if !pending {
 				pending = true
-				go func() { results <- l.renew(renewCtx) }()
+				pendingRenewal.Add(1)
+				go func() { defer pendingRenewal.Done(); results <- l.renew(renewCtx) }()
 			}
 		case err := <-results:
+			if ctx.Err() != nil {
+				return nil
+			}
 			pending = false
 			if err != nil {
 				stopTransport()

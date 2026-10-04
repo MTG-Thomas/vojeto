@@ -58,18 +58,16 @@ func TestUserspaceOverlayWithoutKernelTunnel(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer peer.Close()
-	var loaded *config.C
-	client, err := startReloadable(configFor("192.0.2.2", false), &loaded)
+	client, err := Open(configFor("192.0.2.2", false))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer client.Close()
 	// Renew the actual embedded Nebula identity before the encrypted round trip.
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if err := reloadManagedConfig(loaded, configFor("192.0.2.2", false), logger); err != nil {
+	if err := client.Reload(configFor("192.0.2.2", false)); err != nil {
 		t.Fatal(err)
 	}
-	if reloadManagedConfig(loaded, []byte("pki: {cert: invalid}"), logger) == nil {
+	if client.Reload([]byte("pki: {cert: invalid}")) == nil {
 		t.Fatal("invalid certificate update accepted")
 	}
 	ln, err := peer.Listen("tcp", ":19001")
@@ -150,6 +148,12 @@ func TestUserspaceOverlayWithoutKernelTunnel(t *testing.T) {
 	if err == nil {
 		denied.Close()
 		t.Fatal("firewall denied destination became reachable")
+	}
+	if client.Close() != nil || client.Close() != nil {
+		t.Fatal("transport close not idempotent")
+	}
+	if client.Reload(configFor("192.0.2.2", false)) == nil {
+		t.Fatal("stopped transport reloaded identity")
 	}
 	status, _ := os.ReadFile("/proc/self/status")
 	var capEff string
