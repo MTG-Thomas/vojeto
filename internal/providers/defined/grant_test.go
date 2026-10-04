@@ -108,9 +108,9 @@ func TestGrantProviderCheckpointsBeforeReadyAndUsesStrictRotation(t *testing.T) 
 }
 
 func TestGrantProviderQuarantinesRejectedCandidate(t *testing.T) {
-	for _, kind := range []string{"host", "network", "address", "route", "certificate", "checkpoint", "ownership", "uncertain"} {
+	for _, kind := range []string{"host", "network", "address", "route", "certificate", "certificate address", "checkpoint", "ownership", "uncertain"} {
 		t.Run(kind, func(t *testing.T) {
-			p, store, client, _ := grantFixture(t)
+			p, store, client, grant := grantFixture(t)
 			original := client.enroll
 			client.enroll = func(ctx context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
 				data, key, credentials, meta, err := original(ctx)
@@ -125,6 +125,9 @@ func TestGrantProviderQuarantinesRejectedCandidate(t *testing.T) {
 					data = append(data, []byte("\ntun:\n  unsafe_routes:\n    - route: 192.0.2.0/24\n      via: 100.100.1.2\n")...)
 				case "certificate":
 					data = []byte("pki:\n  cert: invalid\n  ca: invalid\n")
+				case "certificate address":
+					grant.Addresses = []string{"100.100.1.9"}
+					meta.Host.IPAddresses = grant.Addresses
 				case "checkpoint":
 					store.checkpointErr = errors.New("private checkpoint detail")
 				case "ownership":
