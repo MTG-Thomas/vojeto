@@ -20,7 +20,7 @@ ENTRYPOINT ["/netstack.test"]
 FROM proof AS measurements
 COPY --from=build /vojeto /vojeto
 ENV VOJETO_BINARY=/vojeto VOJETO_PROFILE=1 GOMEMLIMIT=96MiB
-FROM scratch AS runtime
+FROM scratch AS runtime-base
 # Leave RSS headroom for a 128 MiB container; Go memory limits are soft.
 ENV GOMEMLIMIT=96MiB
 COPY --from=build /vojeto /vojeto
@@ -29,5 +29,15 @@ COPY NEBULA_LICENSE /licenses/NEBULA_LICENSE
 COPY GVISOR_LICENSE /licenses/GVISOR_LICENSE
 COPY LICENSE /licenses/VOJETO_LICENSE
 COPY THIRD_PARTY_NOTICES.md /licenses/THIRD_PARTY_NOTICES.md
+COPY --from=build /usr/share/doc/ca-certificates/copyright /licenses/SYSTEM_CA_CERTIFICATES_COPYRIGHT
 USER 65532:65532
 ENTRYPOINT ["/vojeto"]
+
+# A release includes all linked notices and cannot bypass missing licenses.
+FROM build AS release-notices
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go list -deps -json ./cmd/vojeto > /tmp/release-dependencies.json \
+    && python3 scripts/dependency-notices.py --output /release-notices --goroot /usr/local/go < /tmp/release-dependencies.json
+FROM runtime-base AS release
+COPY --from=release-notices /release-notices/ /licenses/dependencies/
+# Default builds remain local development artifacts; publication uses release.
+FROM runtime-base AS runtime

@@ -15,8 +15,13 @@ Vojeto is AGPL-3.0. Dependency licenses remain their upstream licenses.
   remove license obligations. See issue #10.
 
 The complete dependency inventory and versions are recorded in go.mod/go.sum.
-A release artifact still needs a complete dependency-license inventory before
-publication beyond the initial development container.
+`docker build --target release .` collects the complete linked-module notice
+bundle and Go runtime license into `/licenses/dependencies`, with its versioned
+inventory. It fails if any linked module has no discoverable license. The runtime
+also retains the system CA package copyright notice. The default `runtime` target
+is a local development artifact and must not be selected for publication.
+Resolving the SDK grant and reviewing license compatibility remain required
+before publishing a release; no registry publication is performed by this build.
 
 `scripts/dependency-notices.py` collects license, notice, and patent files for the
 modules linked into `cmd/vojeto`, plus the Go runtime license. Supply the JSON
