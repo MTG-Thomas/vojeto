@@ -155,7 +155,7 @@ func (c *Client) DoUpdate(ctx context.Context, credentials keys.Credentials) ([]
 		return reject()
 	}
 	var result message.DoUpdateResponse
-	if json.Unmarshal(signed.Data.Message, &result) != nil || !bytes.Equal(result.Nonce, nonce) || result.Counter <= credentials.Counter || len(result.Config) == 0 {
+	if json.Unmarshal(signed.Data.Message, &result) != nil || !bytes.Equal(result.Nonce, nonce) || result.Counter <= credentials.Counter {
 		return reject()
 	}
 	trusted, err := keys.TrustedKeysFromPEM(result.TrustedKeys)

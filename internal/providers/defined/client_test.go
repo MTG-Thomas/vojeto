@@ -140,7 +140,7 @@ func TestClientTimeoutAndCancellation(t *testing.T) {
 }
 func TestClientRotationVerification(t *testing.T) {
 	for _, p256 := range []bool{false, true} {
-		for _, fault := range []string{"", "signature", "nonce", "counter", "trusted", "missing-config", "malformed", "version"} {
+		for _, fault := range []string{"", "signature", "nonce", "counter", "trusted", "malformed", "version"} {
 			t.Run(strings.Join([]string{map[bool]string{false: "25519", true: "p256"}[p256], fault}, "/"), func(t *testing.T) {
 				credentials := clientCredentials(t, p256)
 				c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -170,8 +170,6 @@ func TestClientRotationVerification(t *testing.T) {
 						result.Counter = 17
 					case "trusted":
 						result.TrustedKeys = nil
-					case "missing-config":
-						result.Config = nil
 					}
 					data, _ := json.Marshal(result)
 					if fault == "malformed" {
@@ -276,5 +274,44 @@ func TestClientUncertainRotationNeverRetries(t *testing.T) {
 	}
 	if e = p.Release(context.Background(), current); e == nil || s.releaseCalls != 0 || updates.Load() != 1 {
 		t.Fatal("unsafe identity reused")
+	}
+}
+
+func TestClientCheckpointsVerifiedCredentialsBeforeRejectingEmptyConfig(t *testing.T) {
+	p, s, _ := providerFixture(t)
+	current, e := p.Acquire(context.Background())
+	if e != nil {
+		t.Fatal(e)
+	}
+	old := *p.credentials
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		wrapper := decodeRequest(t, r, old)
+		if wrapper.Type == message.CheckForUpdate {
+			io.WriteString(w, `{"data":{"updateAvailable":true}}`)
+			return
+		}
+		var request message.DoUpdateRequest
+		if json.Unmarshal(wrapper.Value, &request) != nil {
+			t.Error("request")
+		}
+		trusted, _ := keys.TrustedKeysToPEM(old.TrustedKeys)
+		result := message.DoUpdateResponse{Counter: old.Counter + 1, Nonce: request.Nonce, TrustedKeys: trusted, Host: message.HostHostMetadata{ID: old.HostID, IPAddresses: p.state.Addresses}, Network: message.HostNetworkMetadata{ID: "network-FIXTURE", Curve: message.NetworkCurve25519}}
+		data, _ := json.Marshal(result)
+		signature, _ := old.PrivateKey.Sign(data)
+		json.NewEncoder(w).Encode(message.SignedResponseWrapper{Data: message.SignedResponse{Version: 1, Message: data, Signature: signature}})
+	})
+	p.client = c
+	if _, e = p.Renew(context.Background(), current); !errors.Is(e, identity.ErrUnsafeRenewal) {
+		t.Fatal("empty config not rejected", e)
+	}
+	if len(s.saves) != 1 {
+		t.Fatal("rotated credentials not checkpointed", len(s.saves))
+	}
+	saved, credentials, e := decodeIdentityState(s.saves[0])
+	if e != nil || credentials.Counter != old.Counter+1 || !bytes.Equal(saved.Config, current.Config) {
+		t.Fatal("safe credential checkpoint", e)
+	}
+	if e = p.Release(context.Background(), current); e == nil || s.releaseCalls != 0 {
+		t.Fatal("unsafe release")
 	}
 }

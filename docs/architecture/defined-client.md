@@ -18,8 +18,10 @@ Injected transports must honor those contexts.
 Polling requires a present boolean updateAvailable field; missing or malformed
 responses cannot silently authorize continued use. Rotation generates fresh keys
 for the existing curve, verifies the response with the existing trusted keys,
-checks its version, nonce and increasing counter, and requires config and trusted
-keys. Provider-level host, network, address, route and checkpoint checks remain
+checks its version, nonce and increasing counter, and requires trusted keys.
+Even an empty config reaches the provider after a verified rotation, so new
+credentials are checkpointed with the old safe config before config rejection.
+Provider-level host, network, address, route and checkpoint checks remain
 unchanged. There are no automatic retries of DoUpdate: a failed response may follow
 a committed remote rotation and must quarantine the identity.
 
