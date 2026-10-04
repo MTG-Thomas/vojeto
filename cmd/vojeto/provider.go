@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/MTG-Thomas/vojeto/internal/identity"
+	"github.com/MTG-Thomas/vojeto/internal/providers/agent"
 	"github.com/MTG-Thomas/vojeto/internal/providers/azure"
 	"github.com/MTG-Thomas/vojeto/internal/providers/defined"
 	"github.com/MTG-Thomas/vojeto/internal/providers/static"
@@ -19,6 +20,8 @@ import (
 
 type providerConfig struct {
 	Type            string   `json:"type"`
+	AgentSocket     string   `json:"agentSocket,omitempty"`
+	Hostname        string   `json:"hostname,omitempty"`
 	StorageBaseURL  string   `json:"storageBaseURL"`
 	Owner           string   `json:"owner"`
 	Claimant        string   `json:"claimant"`
@@ -48,7 +51,7 @@ func selectProvider(staticPath, providerPath string) (identity.Provider, error) 
 	var cfg providerConfig
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&cfg) != nil || decoder.Decode(new(any)) != io.EOF || cfg.Type != "defined-azure-pool" {
+	if decoder.Decode(&cfg) != nil || decoder.Decode(new(any)) != io.EOF || (cfg.Type != "defined-azure-pool" && cfg.Type != "defined-external-agent") {
 		return nil, errors.New("identity provider configuration rejected")
 	}
 	if cfg.ClaimantEnv != "" {
@@ -65,14 +68,6 @@ func selectProvider(staticPath, providerPath string) (identity.Provider, error) 
 		return nil, errors.New("Defined endpoint rejected")
 	}
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	pool, e := azure.NewPool(client, func(ctx context.Context) (string, error) { return azure.StorageToken(ctx, client) }, cfg.Owner, cfg.HostIDs, cfg.StorageBaseURL)
-	if e != nil {
-		return nil, e
-	}
-	store, e := azure.NewStore(pool, cfg.Claimant)
-	if e != nil {
-		return nil, e
-	}
 	dn, e := defined.NewClient(api.String(), &http.Client{Timeout: 30 * time.Second})
 	if e != nil {
 		return nil, e
@@ -83,6 +78,27 @@ func selectProvider(staticPath, providerPath string) (identity.Provider, error) 
 		if e != nil {
 			return nil, errors.New("poll outage grace rejected")
 		}
+	}
+	if cfg.Type == "defined-external-agent" {
+		if cfg.StorageBaseURL != "" || cfg.Owner != "" || cfg.Claimant != "" || cfg.ClaimantEnv != "" || len(cfg.HostIDs) != 0 || cfg.Hostname == "" || len(cfg.Hostname) > 253 {
+			return nil, errors.New("external identity settings rejected")
+		}
+		store, err := agent.New(cfg.AgentSocket)
+		if err != nil {
+			return nil, err
+		}
+		return defined.NewEnrollmentProvider(store, store, dn, cfg.NetworkID, cfg.Hostname, defined.ProviderOptions{PollOutageGrace: grace})
+	}
+	if cfg.AgentSocket != "" || cfg.Hostname != "" {
+		return nil, errors.New("pool identity settings rejected")
+	}
+	pool, e := azure.NewPool(client, func(ctx context.Context) (string, error) { return azure.StorageToken(ctx, client) }, cfg.Owner, cfg.HostIDs, cfg.StorageBaseURL)
+	if e != nil {
+		return nil, e
+	}
+	store, e := azure.NewStore(pool, cfg.Claimant)
+	if e != nil {
+		return nil, e
 	}
 	return defined.NewProviderWithOptions(store, dn, cfg.NetworkID, defined.ProviderOptions{PollOutageGrace: grace})
 }

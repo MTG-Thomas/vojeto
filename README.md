@@ -93,7 +93,9 @@ timer patch, in isolated dependency copies. Plain `go test ./...` does not apply
 those patches. Linux buffer requests
 respect the host limits; Vojeto defaults `listen.read_buffer` to 256 KiB when
 omitted. The encrypted load-test stall in [#14](https://github.com/MTG-Thomas/vojeto/issues/14)
-remains a production replacement blocker.
+was corrected and passed 20 repeated encrypted load runs; see the
+[measurement evidence](docs/measurements/2026-10-04-linux-rootless.md). Live deployment
+acceptance remains separate.
 
 Run `./vojeto -config /private/nebula.yaml -forwards /private/forwards.json`.
 Configuration contains credentials and must remain private. Forward JSON is an array:
@@ -112,7 +114,9 @@ control: `POST /v1/lifecycle/complete` performs the same bounded shutdown.
 Use a private parent directory to prevent cross-user socket replacement.
 
 The CLI accepts static Nebula configuration or a pre-enrolled Defined/Azure Blob
-identity pool. Forwarding targets may use numeric IPv4 or names explicitly
+identity pool, or a caller-owned
+[local enrollment agent](docs/architecture/identity-agent.md) on Linux.
+Forwarding targets may use numeric IPv4 or names explicitly
 mapped in the readiness configuration. Unmapped names fail closed. It never falls back to host dialing or modifies system DNS.
 The allowlisted finite SOCKS library is opt-in and is not enabled by the CLI.
 Defined checkpoint/rotation and Azure lease ownership now run through the portable

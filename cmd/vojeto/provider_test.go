@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"github.com/MTG-Thomas/vojeto/internal/providers/defined"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,5 +70,58 @@ func TestExplicitPollOutageConfiguration(t *testing.T) {
 		if (err == nil) != grace.valid {
 			t.Fatal(grace.value, err)
 		}
+	}
+}
+
+func TestExternalAgentConfiguration(t *testing.T) {
+	dir, err := os.MkdirTemp("", "vojeto-cli-agent-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(dir, "agent.sock")
+	ln, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	defer os.Remove(dir)
+	if err = os.Chmod(socket, 0600); err != nil {
+		t.Fatal(err)
+	}
+	base := map[string]any{"type": "defined-external-agent", "agentSocket": socket, "networkID": "network-FIXTURE", "hostname": "fixture-worker"}
+	for _, test := range []struct {
+		name  string
+		field string
+		value any
+		valid bool
+	}{
+		{"valid", "", nil, true}, {"missing network", "networkID", "", false}, {"missing hostname", "hostname", "", false}, {"relative socket", "agentSocket", "relative.sock", false}, {"pool storage", "storageBaseURL", "https://state.example.invalid", false}, {"pool owner", "owner", "example", false}, {"pool claimant", "claimant", "example", false}, {"pool env", "claimantEnv", "EXAMPLE_MISSING", false}, {"pool hosts", "hostIDs", []string{"host-FIXTURE"}, false}, {"unknown", "unknown", true, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := make(map[string]any)
+			for k, v := range base {
+				cfg[k] = v
+			}
+			if test.field != "" {
+				cfg[test.field] = test.value
+			}
+			data, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(t.TempDir(), "provider.json")
+			if err = os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			provider, err := selectProvider("", path)
+			if (err == nil) != test.valid {
+				t.Fatal(err)
+			}
+			if test.valid {
+				if _, ok := provider.(*defined.Provider); !ok {
+					t.Fatal("external provider not wired")
+				}
+			}
+		})
 	}
 }
