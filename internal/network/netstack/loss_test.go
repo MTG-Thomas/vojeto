@@ -65,6 +65,7 @@ func testTCPFault(t *testing.T, mode string) {
 		defer pumps.Done()
 		bases := map[string]uint32{}
 		dropped := map[string]bool{}
+		tailDrops := map[string]int{}
 		count := 0
 		var held []byte
 		for {
@@ -95,8 +96,11 @@ func testTCPFault(t *testing.T, mode string) {
 				case "tail":
 					if uint32(th.SequenceNumber()-bases[flow])+uint32(payload) >= payloadBytes-2400 {
 						key := flow + "/" + fmt.Sprint(th.SequenceNumber())
-						if !dropped[key] {
+						// Retransmission can change packet boundaries. Bound the
+						// fault per flow instead of dropping every new sequence.
+						if !dropped[key] && tailDrops[flow] < 3 {
 							dropped[key] = true
+							tailDrops[flow]++
 							drop = true
 						}
 					}
