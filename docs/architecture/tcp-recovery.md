@@ -1,4 +1,4 @@
-# Retransmission after a tail-loss probe
+# TCP retransmission recovery
 
 Vojeto pins gVisor at `9d7a357edefe` through Nebula v1.11.2. Builds apply
 `patches/gvisor-9d7a357edefe-retransmission-timer.patch` in a private dependency
@@ -41,3 +41,26 @@ This isolated regression is necessary but does not replace the encrypted
 acceptance also requires the deployment's own concurrency, latency, identity
 rotation, ownership-loss, and drain evidence. Resource and outage limits remain
 separate from this timer correction.
+
+## Recovery within a smaller nonzero window
+
+A second encrypted-load failure had a 1,200-byte segment awaiting acknowledgement
+while the peer advertised only 1,152 bytes of receive space. Both endpoints had
+backed off their retransmission timers to 25.6 seconds.
+
+The sender's small-window avoidance check deferred splitting new segments to the
+retransmission handler, but also rejected the retransmitted segment in that
+handler. `gvisor-9d7a357edefe-small-window.patch` applies that check only to
+segments that have never been transmitted. Retransmissions can split to fit the
+available positive window. The existing zero-window check, congestion control,
+and timer durations remain unchanged.
+
+`TestRetransmissionFitsSmallNonzeroWindow` drops the first full-sized data segment,
+then rewrites the peer's advertised window and TCP checksum. It verifies exact
+returned bytes, an actual smaller retransmission, and cleanup within three
+seconds. It failed three consecutive runs before the correction and passed ten
+runs with the race detector afterward. This test uses the production TCP stack
+and requires neither encryption nor resource pressure to reproduce the defect.
+
+The encrypted-load repetitions remain a separate acceptance gate; a focused
+regression alone does not establish production readiness.

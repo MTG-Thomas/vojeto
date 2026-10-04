@@ -1,0 +1,11 @@
+--- a/pkg/tcpip/transport/tcp/snd.go
++++ b/pkg/tcpip/transport/tcp/snd.go
+@@ -856,7 +856,7 @@
+ 		// the segment right here if there are no pending segments. If
+ 		// there are pending segments, segment transmits are deferred to
+ 		// the retransmit timer handler.
+-		if s.SndUna != s.SndNxt {
++		if s.SndUna != s.SndNxt && seg.xmitCount == 0 {
+ 			switch {
+ 			case available >= seg.payloadSize():
+ 				// OK to send, the whole segments fits in the
