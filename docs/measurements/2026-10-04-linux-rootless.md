@@ -89,7 +89,7 @@ workload and deadline. Nine streams finished within 19 seconds; one had written
 receive drops, no OOM, and no recorded Nebula decrypt/firewall drop categories.
 TCP queues and retransmission recovery remained active. These observations do
 not identify the root cause. The diagnostic hooks were removed after inspection.
-Production replacement remains blocked by issue #14.
+At this stage, issue #14 still blocked production replacement.
 
 Permanent tests exercise periodic loss, a finite burst, response-tail loss, and
 packet reordering in both directions using the production TCP stack configuration.
@@ -113,6 +113,38 @@ Twenty further encrypted load runs with the same workload, deadlines, one CPU,
 512 MiB shared allowance and rootless restrictions passed nineteen times. One
 stream still stalled at 1,620,032 of 8,388,608 echoed bytes while the other nine
 completed. No OOM was recorded. This establishes an independent timer correction,
-not a complete fix for encrypted load recovery. Issue #14 remains open and
-production replacement remains gated. A passing CI sample cannot supersede that
+not a complete fix for encrypted load recovery. At this stage, issue #14 remained open and
+production replacement remained gated. A passing CI sample cannot supersede that
 failed acceptance run.
+
+## Completed TCP recovery regressions
+
+PRs #18 and #19 correct smaller-window retransmission and pure ACK sequence
+selection at a closed peer window. See [the recovery design](../architecture/tcp-recovery.md).
+Both production-stack regressions fail before their respective corrections and
+passed 100 times with the race detector afterward. Full race tests, vet, standard
+container checks and CI passed, including encrypted proof and ARM64 compilation.
+
+Ten instrumented encrypted runs passed, followed by twenty clean runs without
+diagnostic hooks. The clean batch kept the original 500 open connections, ten
+8 MiB bidirectional streams, 60-second transfer deadline, one CPU, 512 MiB shared
+allowance, UID 65532, no capabilities and read-only filesystem. All twenty passed.
+The source correction is merged at `0e9c83138f4096e2e6b632ba32edc686cfbb4e9e`.
+
+| Measurement | Observed range across twenty clean runs |
+| --- | --- |
+| Idle CLI RSS | 30.2 MiB to 34.1 MiB |
+| 10 connections | 32.2 MiB to 34.3 MiB |
+| 100 connections | 39.5 MiB to 43.7 MiB |
+| 500 connections | 60.7 MiB to 79.0 MiB |
+| Peak CLI RSS | 101.4 MiB to 120.4 MiB |
+| Startup to ready | 0.021 seconds to 0.425 seconds |
+| 160 MiB bidirectional transfer | 16.41 seconds to 38.30 seconds |
+| Active drain | 1.016 seconds to 1.074 seconds |
+| Whole-run CLI CPU | 6.39 seconds to 13.68 seconds |
+
+Issue #14 is closed for these reproduced defects. These samples do not establish
+an upper latency bound, cloud support, live Defined behavior or a production
+memory budget. No image was published and no deployment changed. SDK licensing,
+dynamic-grant integration and deployment-specific acceptance remain separate
+replacement gates.
