@@ -87,8 +87,13 @@ Vojeto defaults to the narrowest useful behavior:
 
 An initial runnable extraction is available. Build with `make build`, verify with
 `make test` (race detector), or build the non-root container with `docker build .`.
-The build applies a checksum-verified Nebula v1.11.2 packet-cache concurrency patch
-in an isolated dependency copy. Plain `go test ./...` does not apply that patch.
+The build applies checksum-verified Nebula v1.11.2 patches for packet-cache
+concurrency and rootless socket-buffer configuration, plus a gVisor retransmission
+timer patch, in isolated dependency copies. Plain `go test ./...` does not apply
+those patches. Linux buffer requests
+respect the host limits; Vojeto defaults `listen.read_buffer` to 256 KiB when
+omitted. The encrypted load-test stall in [#14](https://github.com/MTG-Thomas/vojeto/issues/14)
+remains a production replacement blocker.
 
 Run `./vojeto -config /private/nebula.yaml -forwards /private/forwards.json`.
 Configuration contains credentials and must remain private. Forward JSON is an array:

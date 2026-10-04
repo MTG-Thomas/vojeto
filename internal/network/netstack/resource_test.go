@@ -211,29 +211,56 @@ func TestResourceProfile(t *testing.T) {
 	// Ten streams each move 8 MiB in both directions through encrypted transport.
 	transferStart := time.Now()
 	var wg sync.WaitGroup
+	type streamResult struct {
+		Index                   int
+		ReadBytes, WrittenBytes int64
+		Seconds                 float64
+		ReadError, WriteError   string
+	}
+	results := make(chan streamResult, 10)
 	failures := make(chan error, 10)
-	for _, c := range connections[:10] {
+	for index, c := range connections[:10] {
 		wg.Add(1)
-		go func(c net.Conn) {
+		go func(index int, c net.Conn) {
 			defer wg.Done()
+			started := time.Now()
 			c.SetDeadline(time.Now().Add(60 * time.Second))
-			written := make(chan error, 1)
-			go func() { _, err := io.CopyN(c, repeatReader{}, 8<<20); written <- err }()
-			_, err := io.CopyN(io.Discard, c, 8<<20)
+			written := make(chan streamResult, 1)
+			go func() {
+				n, err := io.CopyN(c, repeatReader{}, 8<<20)
+				result := streamResult{WrittenBytes: n}
+				if err != nil {
+					result.WriteError = err.Error()
+				}
+				written <- result
+			}()
+			n, err := io.CopyN(io.Discard, c, 8<<20)
 			if err != nil {
 				c.Close()
 			}
-			writeErr := <-written
+			result := <-written
+			result.Index, result.ReadBytes, result.Seconds = index, n, time.Since(started).Seconds()
+			if err != nil {
+				result.ReadError = err.Error()
+			}
+			results <- result
 			if err != nil {
 				failures <- err
-			} else if writeErr != nil {
-				failures <- writeErr
+			} else if result.WriteError != "" {
+				failures <- fmt.Errorf("stream %d write failed", index)
 			}
-		}(c)
+		}(index, c)
 	}
 	wg.Wait()
 	close(failures)
+	close(results)
+	var progress []streamResult
+	for result := range results {
+		progress = append(progress, result)
+	}
 	for err := range failures {
+		encoded, _ := json.Marshal(progress)
+		t.Logf("resource failure stream progress: %s", encoded)
 		for _, path := range []string{"/sys/fs/cgroup/memory.events", "/sys/fs/cgroup/memory.peak", "/sys/fs/cgroup/cpu.stat", "/proc/net/snmp"} {
 			data, _ := os.ReadFile(path)
 			if path == "/proc/net/snmp" {

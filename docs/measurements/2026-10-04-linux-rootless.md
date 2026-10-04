@@ -20,7 +20,7 @@ It does not declare a 512 MiB Vojeto requirement. One shared CPU also covers all
 three processes. Measurements below came from x86_64 Linux 6.12.107, with the CLI
 and peer under UID 65532, a read-only root, and zero capabilities.
 
-## Initial failure and correction
+## Initial failure and partial correction
 
 Before TCP selective acknowledgements, repeated transfers sometimes exceeded
 60 seconds. Increasing the test container to 512 MiB and two CPUs did not resolve
@@ -74,3 +74,45 @@ The opt-in measurement test preserves its 60-second transfer deadline and logs
 bounded process/cgroup/UDP counters on failure. Public CI exercises it with the
 same rootless restrictions. Do not replace a failing measurement with a claimed
 budget or relax its deadline to conceal packet-loss recovery failures.
+
+## Subsequent failures, 2026-10-04
+
+The earlier passing sample did not resolve intermittent transfer stalls. Follow-up
+runs reproduced the original 60-second failure with SACK enabled. Linux Nebula
+socket-buffer setters used privileged FORCE options; the rootless fallback now
+requests ordinary buffers within the host's limits. That fixes an independently
+reproduced EPERM error, but another five-run sample still failed once.
+
+A temporary diagnostic build then failed once in ten runs under the same encrypted
+workload and deadline. Nine streams finished within 19 seconds; one had written
+8 MiB and received only 850,400 bytes at timeout. The snapshot recorded UDP
+receive drops, no OOM, and no recorded Nebula decrypt/firewall drop categories.
+TCP queues and retransmission recovery remained active. These observations do
+not identify the root cause. The diagnostic hooks were removed after inspection.
+Production replacement remains blocked by issue #14.
+
+Permanent tests exercise periodic loss, a finite burst, response-tail loss, and
+packet reordering in both directions using the production TCP stack configuration.
+They compare every returned byte and join connection writers, echo handlers, and
+packet pumps. Passing these isolated regressions does not replace the encrypted
+load test or prove the deployed concurrency budget.
+
+## Zero-pipe tail-probe timer correction
+
+A bounded controlled tail-loss trace reproduced a sender with 3,600 unacknowledged
+bytes and zero packets in its pipe estimate. After its tail probe, retransmission
+was not armed. The checksum-verified gVisor patch described in
+[the TCP recovery design](../architecture/tcp-recovery.md) corrects that timer gate
+without changing retransmission durations or congestion control. A direct
+regression fails on the pinned original and passes with the patch. Ten
+instrumented tail-loss race runs and ten uninstrumented race runs of all four
+fault modes passed after the correction. The full race suite and standard
+container race/vet gates also passed; temporary probes were removed.
+
+Twenty further encrypted load runs with the same workload, deadlines, one CPU,
+512 MiB shared allowance and rootless restrictions passed nineteen times. One
+stream still stalled at 1,620,032 of 8,388,608 echoed bytes while the other nine
+completed. No OOM was recorded. This establishes an independent timer correction,
+not a complete fix for encrypted load recovery. Issue #14 remains open and
+production replacement remains gated. A passing CI sample cannot supersede that
+failed acceptance run.
