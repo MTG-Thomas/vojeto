@@ -19,4 +19,7 @@ patch_file=$(pwd)/patches/gvisor-9d7a357edefe-retransmission-timer.patch
 printf '%s  %s\n' '95ed275a465334538bcf279c5318da0cc16e55857896a6b40b038e13c7301cd5' patches/gvisor-9d7a357edefe-small-window.patch | sha256sum -c -
 window_patch=$(pwd)/patches/gvisor-9d7a357edefe-small-window.patch
 (cd "$destination" && git apply --check "$window_patch" && git apply "$window_patch")
+printf '%s  %s\n' '36f4a73c389cb5b39a0fe5797b56faf0030f5d88aa574afe5ddb8fffbce7f19a' patches/gvisor-9d7a357edefe-zero-window-ack.patch | sha256sum -c -
+ack_patch=$(pwd)/patches/gvisor-9d7a357edefe-zero-window-ack.patch
+(cd "$destination" && git apply --check "$ack_patch" && git apply "$ack_patch")
 go mod edit -modfile="$alternate" -replace="gvisor.dev/gvisor=$destination"

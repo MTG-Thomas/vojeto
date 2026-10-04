@@ -64,3 +64,23 @@ and requires neither encryption nor resource pressure to reproduce the defect.
 
 The encrypted-load repetitions remain a separate acceptance gate; a focused
 regression alone does not establish production readiness.
+
+## Pure acknowledgements while the peer window is closed
+
+After the smaller-window correction, an encrypted-load failure showed 16
+unacknowledged bytes, a zero advertised window and an echo writer blocked on
+unacknowledged data in the other direction. Pure ACKs used `SndNxt`, beyond the
+peer's expected sequence, and were rejected. Retransmission probes could not
+break the cycle.
+
+`gvisor-9d7a357edefe-zero-window-ack.patch` uses `SndUna` for pure ACKs only when
+the peer advertises zero receive space. Data transmissions, zero-window probes,
+receiver sequence validation, congestion control and timer durations are unchanged.
+It does not accept out-of-window ACKs or data at the receiver.
+
+The production-stack regression loses a segment and closes the advertised peer
+window. The peer reopens only after an ACK arrives at the expected sequence.
+The test verifies exact bidirectional bytes, smaller retransmission and bounded
+cleanup. It failed three times before the correction and passed ten times under
+the race detector afterward. Encrypted load evidence must still be collected from
+a clean build without diagnostic hooks before production acceptance.
