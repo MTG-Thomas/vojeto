@@ -12,11 +12,18 @@ RUN go vet ./...
 RUN go list -deps ./... > /tmp/deps && ! grep -q '^golang.org/x/crypto/openpgp' /tmp/deps
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -trimpath -o /vojeto ./cmd/vojeto
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -trimpath -o /vojeto-peer ./cmd/vojeto-peer
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o /vojeto-peer.exe ./cmd/vojeto-peer
+RUN CGO_ENABLED=0 go test -c -o /peer.test ./peer
 RUN CGO_ENABLED=0 go test -c -o /netstack.test ./internal/network/netstack
 FROM scratch AS proof
 COPY --from=build /netstack.test /netstack.test
 USER 65532:65532
 ENTRYPOINT ["/netstack.test"]
+FROM scratch AS peer-proof
+COPY --from=build /peer.test /peer.test
+USER 65532:65532
+ENTRYPOINT ["/peer.test"]
 FROM proof AS measurements
 COPY --from=build /vojeto /vojeto
 ENV VOJETO_BINARY=/vojeto VOJETO_PROFILE=1 GOMEMLIMIT=96MiB
@@ -39,5 +46,18 @@ RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go list -deps -json ./cmd/vojeto > /tmp/r
     && python3 scripts/dependency-notices.py --output /release-notices --goroot /usr/local/go < /tmp/release-dependencies.json
 FROM runtime-base AS release
 COPY --from=release-notices /release-notices/ /licenses/dependencies/
+
+# The separate peer executable does not link the Managed Defined SDK. Its own
+# notice inventory must pass; the existing vojeto release gate remains intact.
+FROM build AS peer-release-notices
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go list -deps -json ./cmd/vojeto-peer > /tmp/peer-dependencies.json \
+    && python3 scripts/dependency-notices.py --output /peer-notices --goroot /usr/local/go < /tmp/peer-dependencies.json
+FROM scratch AS peer-release
+ENV GOMEMLIMIT=96MiB
+COPY --from=build /vojeto-peer /vojeto-peer
+COPY LICENSE /licenses/VOJETO_LICENSE
+COPY --from=peer-release-notices /peer-notices/ /licenses/dependencies/
+USER 65532:65532
+ENTRYPOINT ["/vojeto-peer"]
 # Default builds remain local development artifacts; publication uses release.
 FROM runtime-base AS runtime

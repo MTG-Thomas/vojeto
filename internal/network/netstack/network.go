@@ -113,8 +113,9 @@ func (d *routedDevice) RoutesFor(ip netip.Addr) routing.Gateways {
 	return result
 }
 
-// Network is an outbound IPv4 Nebula/gVisor userspace stack.
+// Network is an IPv4 Nebula/gVisor userspace stack. Listeners are opt-in.
 type Network struct {
+	address netip.Addr
 	control *nebula.Control
 	ipstack *stack.Stack
 	reader  *io.PipeReader
@@ -154,7 +155,7 @@ func newOutboundNetwork(control *nebula.Control, d *routedDevice) (*Network, err
 	if err != nil {
 		return nil, err
 	}
-	s := &Network{control: control, ipstack: ipstack}
+	s := &Network{control: control, ipstack: ipstack, address: address}
 	link := channel.New(512, 1280, "")
 	if e := s.ipstack.CreateNIC(1, link); e != nil {
 		s.ipstack.Close()
@@ -281,6 +282,18 @@ func startReloadable(data []byte, loaded **config.C) (*Network, error) {
 func Open(data []byte) (*Network, error) { return start(data) }
 func (s *Network) DialTCP(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
 	return s.DialContext(ctx, "tcp", dst.String())
+}
+
+// ListenTCP explicitly accepts overlay traffic at this identity's own address.
+// Callers own peer firewall policy and cancellation of accepted connections.
+// Existing outbound consumers do not enable listeners implicitly.
+func (s *Network) ListenTCP(addr netip.AddrPort) (net.Listener, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || addr.Addr() != s.address || addr.Port() == 0 {
+		return nil, errors.New("own overlay address and nonzero port required")
+	}
+	return gonet.ListenTCP(s.ipstack, tcpip.FullAddress{NIC: 1, Addr: tcpip.AddrFrom4(addr.Addr().As4()), Port: addr.Port()}, ipv4.ProtocolNumber)
 }
 
 // Resolve accepts numeric addresses only until an explicit overlay resolver is configured.
