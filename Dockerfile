@@ -7,6 +7,8 @@ RUN scripts/prepare-nebula-patch.sh /nebula-patched /src/vojeto-patched.mod
 ENV GOFLAGS=-modfile=/src/vojeto-patched.mod
 RUN cd /nebula-patched && GOFLAGS= go test -race -run '^TestPacketCacheConcurrentCountAndTransfer$' -count=100 -timeout=2m .
 RUN go test -race -run "^TestVojetoTailProbe" -count=100 gvisor.dev/gvisor/pkg/tcpip/transport/tcp
+RUN CGO_ENABLED=0 go build -o /vojeto-peer-tests ./cmd/vojeto-peer && chmod 0555 /vojeto-peer-tests
+ENV VOJETO_PEER_BINARY=/vojeto-peer-tests
 RUN go test -race -timeout=4m ./...
 RUN go vet ./...
 RUN go list -deps ./... > /tmp/deps && ! grep -q '^golang.org/x/crypto/openpgp' /tmp/deps
@@ -14,6 +16,8 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -trimpath -o /vojeto ./cmd/vojeto
 RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -trimpath -o /vojeto-peer ./cmd/vojeto-peer
 RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o /vojeto-peer.exe ./cmd/vojeto-peer
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -trimpath -o /vojeto-launcher ./cmd/vojeto-launcher
+RUN CGO_ENABLED=0 go test -c -o /launcher.test ./launcher
 RUN CGO_ENABLED=0 go test -c -o /peer.test ./peer
 RUN CGO_ENABLED=0 go test -c -o /netstack.test ./internal/network/netstack
 FROM scratch AS proof
@@ -24,6 +28,12 @@ FROM scratch AS peer-proof
 COPY --from=build /peer.test /peer.test
 USER 65532:65532
 ENTRYPOINT ["/peer.test"]
+FROM scratch AS launcher-proof
+COPY --from=build /launcher.test /launcher.test
+COPY --from=build --chmod=0555 /vojeto-peer-tests /vojeto-peer
+ENV VOJETO_PEER_BINARY=/vojeto-peer
+USER 65532:65532
+ENTRYPOINT ["/launcher.test"]
 FROM proof AS measurements
 COPY --from=build /vojeto /vojeto
 ENV VOJETO_BINARY=/vojeto VOJETO_PROFILE=1 GOMEMLIMIT=96MiB
@@ -59,5 +69,16 @@ COPY LICENSE /licenses/VOJETO_LICENSE
 COPY --from=peer-release-notices /peer-notices/ /licenses/dependencies/
 USER 65532:65532
 ENTRYPOINT ["/vojeto-peer"]
+FROM build AS launcher-release-notices
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go list -deps -json ./cmd/vojeto-launcher ./cmd/vojeto-peer > /tmp/launcher-dependencies.json \
+    && python3 scripts/dependency-notices.py --output /launcher-notices --goroot /usr/local/go < /tmp/launcher-dependencies.json
+FROM scratch AS launcher-release
+ENV GOMEMLIMIT=192MiB
+COPY --from=build --chmod=0555 /vojeto-launcher /vojeto-launcher
+COPY --from=build --chmod=0555 /vojeto-peer /vojeto-peer
+COPY LICENSE /licenses/VOJETO_LICENSE
+COPY --from=launcher-release-notices /launcher-notices/ /licenses/dependencies/
+USER 65532:65532
+ENTRYPOINT ["/vojeto-launcher"]
 # Default builds remain local development artifacts; publication uses release.
 FROM runtime-base AS runtime

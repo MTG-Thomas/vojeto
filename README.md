@@ -36,6 +36,10 @@ locally generated endpoint keys and an ephemeral CA, with a maximum 30-minute
 lifetime. See [the session guide](docs/architecture/ephemeral-peers.md) for setup,
 trust boundaries, Windows handling, and Azure lighthouse requirements.
 
+The Linux [router launcher](docs/architecture/router-launcher.md) adds a
+bounded mTLS broker API and supervises isolated finite lighthouse child processes.
+It is opt-in infrastructure; no existing router service is changed automatically.
+
 ## Architecture direction
 
 ```text
