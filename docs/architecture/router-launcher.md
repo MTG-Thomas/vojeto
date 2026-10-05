@@ -71,7 +71,10 @@ placeholder fingerprints. Both directories must be absolute, private mode
 permission and no group/other write access. The HTTPS server identity must
 match the broker URL; use a dedicated client CA and keep its signing key off
 the router. Fingerprint rotation requires a supervised restart and terminates
-active sessions. No hot identity rotation is promised.
+active lighthouse processes. Endpoint certificates remain valid until signed
+expiry, and established direct connections can continue without a lighthouse.
+The controller must stop endpoint processes for prompt disconnection; the
+launcher does not supervise those processes. No hot identity rotation is promised.
 
 Publication is manual from reviewed main, after its exact commit is Verified
 and push CI succeeded. The publisher's `expected_sha` must match that exact
