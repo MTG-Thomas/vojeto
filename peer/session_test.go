@@ -318,3 +318,32 @@ func TestEncryptedRelayAndFirewall(t *testing.T) {
 		t.Fatal("gateway cleanup")
 	}
 }
+
+func TestAbsoluteDeadline(t *testing.T) {
+	op, _, _ := Keygen()
+	tp, _, _ := Keygen()
+	deadline := time.Now().UTC().Add(20 * time.Second)
+	request := Request{OperatorKey: op, TargetKey: tp, Target: "127.0.0.1:22", TargetEndpoint: "127.0.0.1:4242", Deadline: deadline}
+	grants, err := Issue(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, grant := range grants {
+		if !grant.Expires.Equal(deadline.Truncate(time.Second)) {
+			t.Fatal("grant extended or replaced absolute deadline")
+		}
+	}
+	request.Lifetime = time.Minute
+	if _, err = Issue(request); err == nil {
+		t.Fatal("accepted conflicting deadline and lifetime")
+	}
+	request.Lifetime = 0
+	request.Deadline = time.Now().Add(-time.Second)
+	if _, err = Issue(request); err == nil {
+		t.Fatal("accepted expired deadline")
+	}
+	request.Deadline = time.Now().Add(MaxLifetime + time.Minute)
+	if _, err = Issue(request); err == nil {
+		t.Fatal("accepted excessive deadline")
+	}
+}

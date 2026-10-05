@@ -44,6 +44,8 @@ type Request struct {
 	OperatorKey, TargetKey, LighthouseKey      []byte
 	Target, TargetEndpoint, LighthouseEndpoint string
 	Lifetime                                   time.Duration
+	// Deadline is an alternative to Lifetime for an immutable broker lease.
+	Deadline time.Time
 }
 
 // Keygen returns public bytes to send to the issuer and private PEM to retain locally.
@@ -68,6 +70,12 @@ func signingBytes(g Grant) []byte { g.Signature = nil; b, _ := json.Marshal(g); 
 // Issue creates a new per-session CA in memory. The signing key is not returned
 // or persisted, so this session cannot silently acquire additional peers.
 func Issue(r Request) (map[string]Grant, error) {
+	if !r.Deadline.IsZero() {
+		if r.Lifetime != 0 {
+			return nil, ErrRejected
+		}
+		r.Lifetime = time.Until(r.Deadline)
+	}
 	if r.Lifetime < time.Second || r.Lifetime > MaxLifetime || !target(r.Target) || len(r.OperatorKey) != 32 || len(r.TargetKey) != 32 || bytes.Equal(r.OperatorKey, r.TargetKey) {
 		return nil, ErrRejected
 	}
@@ -87,6 +95,12 @@ func Issue(r Request) (map[string]Grant, error) {
 	id := hex.EncodeToString(nonce)
 	now := time.Now().UTC().Truncate(time.Second)
 	expiry := now.Add(r.Lifetime).Truncate(time.Second)
+	if !r.Deadline.IsZero() {
+		expiry = r.Deadline.UTC().Truncate(time.Second)
+		if !expiry.After(now) {
+			return nil, ErrRejected
+		}
+	}
 	pub, priv, e := ed25519.GenerateKey(rand.Reader)
 	if e != nil {
 		return nil, ErrRejected
