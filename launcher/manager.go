@@ -199,7 +199,7 @@ func (m *Manager) Start(r StartRequest) (Session, error) {
 	if e != nil {
 		return Session{}, ErrUnavailable
 	}
-	grants, e := peer.Issue(peer.Request{OperatorKey: r.OperatorKey, TargetKey: r.TargetKey, LighthouseKey: pub, Target: r.Destination, LighthouseEndpoint: netip.AddrPortFrom(m.config.PublicIP, port).String(), Lifetime: time.Until(r.Expires)})
+	grants, e := peer.Issue(peer.Request{OperatorKey: r.OperatorKey, TargetKey: r.TargetKey, LighthouseKey: pub, Target: r.Destination, LighthouseEndpoint: netip.AddrPortFrom(m.config.PublicIP, port).String(), Deadline: r.Expires})
 	if e != nil {
 		clear(private)
 		return Session{}, ErrInvalid
@@ -209,7 +209,7 @@ func (m *Manager) Start(r StartRequest) (Session, error) {
 		clear(private)
 		return Session{}, e
 	}
-	ctx, cancel := context.WithCancel(m.ctx)
+	ctx, cancel := context.WithDeadline(m.ctx, r.Expires)
 	s := &running{hash: hash, session: Session{ID: r.ID, Operator: grants["operator"], Target: grants["target"]}, port: port, cancel: cancel, done: make(chan struct{})}
 	m.sessions[r.ID] = s
 	ready := make(chan struct{}, 1)
