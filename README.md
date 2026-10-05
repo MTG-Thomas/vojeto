@@ -27,6 +27,15 @@ covered by Vojeto tests rather than evidence from the current infra prototype.
 
 The extraction will preserve those behaviors while separating portable client functionality from BiFrost-, Azure-, and Defined-specific policy.
 
+## Finite peer sessions
+
+`make build-peer` builds the separate `vojeto-peer` executable and public `peer`
+Go API. It supports an operator loopback forward, a target gateway to one signed
+IPv4 TCP destination, and an optional isolated lighthouse/relay. Sessions use
+locally generated endpoint keys and an ephemeral CA, with a maximum 30-minute
+lifetime. See [the session guide](docs/architecture/ephemeral-peers.md) for setup,
+trust boundaries, Windows handling, and Azure lighthouse requirements.
+
 ## Architecture direction
 
 ```text
@@ -75,7 +84,8 @@ Vojeto defaults to the narrowest useful behavior:
 - no root requirement;
 - no `NET_ADMIN`;
 - no TUN device;
-- listeners require explicit loopback addresses;
+- local application listeners require explicit loopback addresses;
+- the separate peer target accepts only its signed operator over the overlay;
 - SOCKS is opt-in;
 - SOCKS destinations are explicitly allowlisted;
 - TCP CONNECT only initially;
@@ -89,7 +99,9 @@ An initial runnable extraction is available. Build with `make build`, verify wit
 `make test` (race detector), or build a local non-root development container with
 `docker build .`. Publication uses `docker build --target release .`, which
 collects the complete linked-license bundle and rejects missing licenses;
-that target currently stops on the unresolved Defined SDK license.
+that target currently stops on the unresolved Defined SDK license. The separate
+`docker build --target peer-release .` inventories only `vojeto-peer` dependencies
+and does not link the Defined SDK. Passing that gate is not live deployment proof.
 The build applies checksum-verified Nebula v1.11.2 patches for packet-cache
 concurrency and rootless socket-buffer configuration, plus a gVisor retransmission
 timer patch, in isolated dependency copies. Plain `go test ./...` does not apply

@@ -22,6 +22,12 @@ jobs:
         run: docker build --target proof --tag vojeto-proof .
       - name: Rootless encrypted overlay proof
         run: docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges -e REQUIRE_ZERO_CAPABILITIES=1 vojeto-proof -test.v
+      - name: Rootless finite peer sessions and relay proof
+        run: |
+          docker build --target peer-proof --tag vojeto-peer-proof .
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges vojeto-peer-proof -test.v -test.timeout 90s
+      - name: Verify separate peer release license inventory
+        run: docker build --target peer-release --tag vojeto-peer-release .
       - name: Measure isolated CLI resources with encrypted traffic
         run: |
           docker build --target measurements --tag vojeto-measurements .
