@@ -27,7 +27,7 @@ cross-compiled; Windows runtime is a separate canary gate.
 Each endpoint runs `keygen` locally and sends only `public.json` through an
 already authenticated operator/device channel. The authorized issuer calls
 `Issue` or `issue`, signing those public keys, the exact destination, IPv4 underlay
-endpoints, roles, and expiry. The session Ed25519 CA exists only in issuer
+endpoints, roles, and expiry. The session Ed25519 CA signing key exists only in issuer
 memory and is not returned or saved. Endpoint X25519 private keys stay local.
 
 A grant includes its CA and therefore must arrive over the trusted broker
