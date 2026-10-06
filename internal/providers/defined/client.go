@@ -14,9 +14,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/DefinedNet/dnapi"
-	"github.com/DefinedNet/dnapi/keys"
-	"github.com/DefinedNet/dnapi/message"
+	"github.com/MTG-Thomas/vojeto/internal/definedwire"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 )
 
 const responseLimit = 2 << 20
@@ -28,7 +27,7 @@ var errControlPlane = errors.New("Defined control-plane request rejected")
 var ErrTransientPoll = errors.New("Defined read-only poll temporarily unavailable")
 
 // Client implements bounded polling, rotation and externally supplied enrollment.
-// It uses SDK public signing, key and wire types; it does not use its HTTP client.
+// It uses Vojeto-owned wire codecs and signing keys.
 type Client struct {
 	http               http.Client
 	endpoint           string
@@ -50,17 +49,17 @@ func NewClient(base string, client *http.Client) (*Client, error) {
 		c.Timeout = 30 * time.Second
 	}
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	u.Path = message.EndpointV1
+	u.Path = definedwire.EndpointV1
 	endpoint := u.String()
-	u.Path = message.EnrollEndpoint
+	u.Path = definedwire.EnrollEndpoint
 	return &Client{http: c, endpoint: endpoint, enrollmentEndpoint: u.String()}, nil
 }
 
-func (c *Client) request(ctx context.Context, operation string, value []byte, credentials keys.Credentials) ([]byte, error) {
+func (c *Client) request(ctx context.Context, operation string, value []byte, credentials wirekeys.Credentials) ([]byte, error) {
 	if credentials.PrivateKey == nil {
 		return nil, errControlPlane
 	}
-	body, err := dnapi.SignRequestV1(operation, value, credentials.HostID, credentials.Counter, credentials.PrivateKey)
+	body, err := definedwire.SignRequestV1(operation, value, credentials.HostID, credentials.Counter, credentials.PrivateKey)
 	if err != nil {
 		return nil, errControlPlane
 	}
@@ -73,7 +72,7 @@ func (c *Client) request(ctx context.Context, operation string, value []byte, cr
 	resp, err := c.http.Do(req)
 	if err != nil {
 		var networkError net.Error
-		if operation == message.CheckForUpdate && !errors.Is(ctx.Err(), context.Canceled) && errors.As(err, &networkError) && networkError.Timeout() {
+		if operation == definedwire.CheckForUpdate && !errors.Is(ctx.Err(), context.Canceled) && errors.As(err, &networkError) && networkError.Timeout() {
 			return nil, ErrTransientPoll
 		}
 		return nil, errControlPlane
@@ -84,7 +83,7 @@ func (c *Client) request(ctx context.Context, operation string, value []byte, cr
 	}
 	// Error bodies can contain credentials or operator-controlled text. Never
 	// read or include them in errors, and never retry a possibly accepted update.
-	if operation == message.CheckForUpdate {
+	if operation == definedwire.CheckForUpdate {
 		switch resp.StatusCode {
 		case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 			return nil, ErrTransientPoll
@@ -100,8 +99,8 @@ func (c *Client) request(ctx context.Context, operation string, value []byte, cr
 	return data, nil
 }
 
-func (c *Client) CheckForUpdate(ctx context.Context, credentials keys.Credentials) (bool, error) {
-	data, err := c.request(ctx, message.CheckForUpdate, nil, credentials)
+func (c *Client) CheckForUpdate(ctx context.Context, credentials wirekeys.Credentials) (bool, error) {
+	data, err := c.request(ctx, definedwire.CheckForUpdate, nil, credentials)
 	if err != nil {
 		return false, err
 	}
@@ -117,14 +116,14 @@ func (c *Client) CheckForUpdate(ctx context.Context, credentials keys.Credential
 	return *result.Data.Available, nil
 }
 
-func (c *Client) DoUpdate(ctx context.Context, credentials keys.Credentials) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
-	reject := func() ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+func (c *Client) DoUpdate(ctx context.Context, credentials wirekeys.Credentials) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
+	reject := func() ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
 		return nil, nil, nil, nil, errControlPlane
 	}
 	if credentials.PrivateKey == nil {
 		return reject()
 	}
-	generated, err := keys.New()
+	generated, err := wirekeys.New()
 	if err != nil {
 		return reject()
 	}
@@ -132,8 +131,8 @@ func (c *Client) DoUpdate(ctx context.Context, credentials keys.Credentials) ([]
 	if _, err = rand.Read(nonce); err != nil {
 		return reject()
 	}
-	request := message.DoUpdateRequest{Nonce: nonce}
-	var host keys.PrivateKey
+	request := definedwire.DoUpdateRequest{Nonce: nonce}
+	var host wirekeys.PrivateKey
 	var nebula []byte
 	switch credentials.PrivateKey.Unwrap().(type) {
 	case ed25519.PrivateKey:
@@ -157,11 +156,11 @@ func (c *Client) DoUpdate(ctx context.Context, credentials keys.Credentials) ([]
 	if err != nil {
 		return reject()
 	}
-	data, err := c.request(ctx, message.DoUpdate, value, credentials)
+	data, err := c.request(ctx, definedwire.DoUpdate, value, credentials)
 	if err != nil {
 		return reject()
 	}
-	var signed message.SignedResponseWrapper
+	var signed definedwire.SignedResponseWrapper
 	if json.Unmarshal(data, &signed) != nil || signed.Data.Version != 1 {
 		return reject()
 	}
@@ -175,26 +174,26 @@ func (c *Client) DoUpdate(ctx context.Context, credentials keys.Credentials) ([]
 	if !verified {
 		return reject()
 	}
-	var result message.DoUpdateResponse
+	var result definedwire.DoUpdateResponse
 	if json.Unmarshal(signed.Data.Message, &result) != nil || !bytes.Equal(result.Nonce, nonce) || result.Counter <= credentials.Counter {
 		return reject()
 	}
-	trusted, err := keys.TrustedKeysFromPEM(result.TrustedKeys)
+	trusted, err := wirekeys.TrustedKeysFromPEM(result.TrustedKeys)
 	if err != nil || len(trusted) == 0 {
 		return reject()
 	}
-	next := &keys.Credentials{HostID: credentials.HostID, Counter: result.Counter, PrivateKey: host, TrustedKeys: trusted}
+	next := &wirekeys.Credentials{HostID: credentials.HostID, Counter: result.Counter, PrivateKey: host, TrustedKeys: trusted}
 	addresses := result.Host.IPAddresses
 	if len(addresses) == 0 && result.Host.IPAddress != "" {
 		addresses = []string{result.Host.IPAddress}
 	}
-	meta := &dnapi.ConfigMeta{
-		Org:     dnapi.ConfigOrg{ID: result.Organization.ID, Name: result.Organization.Name},
-		Network: dnapi.ConfigNetwork{ID: result.Network.ID, Name: result.Network.Name},
-		Host:    dnapi.ConfigHost{ID: result.Host.ID, Name: result.Host.Name, IPAddresses: addresses},
+	meta := &definedwire.ConfigMeta{
+		Org:     definedwire.ConfigOrg{ID: result.Organization.ID, Name: result.Organization.Name},
+		Network: definedwire.ConfigNetwork{ID: result.Network.ID, Name: result.Network.Name},
+		Host:    definedwire.ConfigHost{ID: result.Host.ID, Name: result.Host.Name, IPAddresses: addresses},
 	}
 	if result.EndpointOIDCMeta != nil {
-		meta.EndpointOIDC = &dnapi.ConfigEndpointOIDC{Email: result.EndpointOIDCMeta.Email, ExpiresAt: result.EndpointOIDCMeta.ExpiresAt}
+		meta.EndpointOIDC = &definedwire.ConfigEndpointOIDC{Email: result.EndpointOIDCMeta.Email, ExpiresAt: result.EndpointOIDCMeta.ExpiresAt}
 	}
 	return result.Config, nebula, next, meta, nil
 }

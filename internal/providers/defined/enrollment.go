@@ -9,9 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/DefinedNet/dnapi"
-	"github.com/DefinedNet/dnapi/keys"
-	"github.com/DefinedNet/dnapi/message"
+	"github.com/MTG-Thomas/vojeto/internal/definedwire"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 )
 
 // ErrUncertainEnrollment requires reconciliation by the exclusive grant owner.
@@ -22,14 +21,14 @@ var ErrUncertainEnrollment = errors.New("Defined enrollment requires reconciliat
 // must fence the grant, validate returned identity/network/route policy, and
 // checkpoint accepted credentials before starting transport. This method does
 // not acquire ownership or make an identity ready for transport.
-func (c *Client) Enroll(ctx context.Context, code, hostname string) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
-	reject := func() ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+func (c *Client) Enroll(ctx context.Context, code, hostname string) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
+	reject := func() ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
 		return nil, nil, nil, nil, ErrUncertainEnrollment
 	}
 	if len(code) == 0 || len(code) > 8192 || len(hostname) > 253 || ctx.Err() != nil {
 		return reject()
 	}
-	generated, err := keys.New()
+	generated, err := wirekeys.New()
 	if err != nil {
 		return reject()
 	}
@@ -44,7 +43,7 @@ func (c *Client) Enroll(ctx context.Context, code, hostname string) ([]byte, []b
 	if err != nil {
 		return reject()
 	}
-	value, err := json.Marshal(message.EnrollRequest{Code: code, Hostname: hostname, Timestamp: time.Now().UTC(), HostPubkeyEd25519: ed, HostPubkeyP256: p256, NebulaPubkeyX25519: generated.NebulaX25519PublicKeyPEM, NebulaPubkeyP256: generated.NebulaP256PublicKeyPEM})
+	value, err := json.Marshal(definedwire.EnrollRequest{Code: code, Hostname: hostname, Timestamp: time.Now().UTC(), HostPubkeyEd25519: ed, HostPubkeyP256: p256, NebulaPubkeyX25519: generated.NebulaX25519PublicKeyPEM, NebulaPubkeyP256: generated.NebulaP256PublicKeyPEM})
 	if err != nil {
 		return reject()
 	}
@@ -68,7 +67,7 @@ func (c *Client) Enroll(ctx context.Context, code, hostname string) ([]byte, []b
 	}
 	var result struct {
 		Data *struct {
-			message.EnrollResponseData
+			definedwire.EnrollResponseData
 			Counter *uint `json:"counter"`
 		} `json:"data"`
 	}
@@ -80,19 +79,19 @@ func (c *Client) Enroll(ctx context.Context, code, hostname string) ([]byte, []b
 	if enrolled.HostID == "" || enrolled.HostID != enrolled.Host.ID || enrolled.Network.ID == "" || len(enrolled.Config) == 0 {
 		return reject()
 	}
-	trusted, err := keys.TrustedKeysFromPEM(enrolled.TrustedKeys)
+	trusted, err := wirekeys.TrustedKeysFromPEM(enrolled.TrustedKeys)
 	if err != nil || len(trusted) == 0 {
 		return reject()
 	}
-	var host keys.PrivateKey
+	var host wirekeys.PrivateKey
 	var nebula []byte
 	switch enrolled.Network.Curve {
-	case message.NetworkCurve25519:
+	case definedwire.NetworkCurve25519:
 		if generated.HostEd25519PrivateKey == nil || len(generated.NebulaX25519PrivateKeyPEM) == 0 {
 			return reject()
 		}
 		host, nebula = generated.HostEd25519PrivateKey, generated.NebulaX25519PrivateKeyPEM
-	case message.NetworkCurveP256:
+	case definedwire.NetworkCurveP256:
 		host, nebula = generated.HostP256PrivateKey, generated.NebulaP256PrivateKeyPEM
 	default:
 		return reject()
@@ -104,10 +103,10 @@ func (c *Client) Enroll(ctx context.Context, code, hostname string) ([]byte, []b
 	if len(addresses) == 0 {
 		return reject()
 	}
-	credentials := &keys.Credentials{HostID: enrolled.HostID, Counter: enrolled.Counter, PrivateKey: host, TrustedKeys: trusted}
-	meta := &dnapi.ConfigMeta{Org: dnapi.ConfigOrg{ID: enrolled.Organization.ID, Name: enrolled.Organization.Name}, Network: dnapi.ConfigNetwork{ID: enrolled.Network.ID, Name: enrolled.Network.Name}, Host: dnapi.ConfigHost{ID: enrolled.Host.ID, Name: enrolled.Host.Name, IPAddresses: addresses}}
+	credentials := &wirekeys.Credentials{HostID: enrolled.HostID, Counter: enrolled.Counter, PrivateKey: host, TrustedKeys: trusted}
+	meta := &definedwire.ConfigMeta{Org: definedwire.ConfigOrg{ID: enrolled.Organization.ID, Name: enrolled.Organization.Name}, Network: definedwire.ConfigNetwork{ID: enrolled.Network.ID, Name: enrolled.Network.Name}, Host: definedwire.ConfigHost{ID: enrolled.Host.ID, Name: enrolled.Host.Name, IPAddresses: addresses}}
 	if enrolled.EndpointOIDCMeta != nil {
-		meta.EndpointOIDC = &dnapi.ConfigEndpointOIDC{Email: enrolled.EndpointOIDCMeta.Email, ExpiresAt: enrolled.EndpointOIDCMeta.ExpiresAt}
+		meta.EndpointOIDC = &definedwire.ConfigEndpointOIDC{Email: enrolled.EndpointOIDCMeta.Email, ExpiresAt: enrolled.EndpointOIDCMeta.ExpiresAt}
 	}
 	return enrolled.Config, nebula, credentials, meta, nil
 }

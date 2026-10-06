@@ -5,8 +5,8 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/DefinedNet/dnapi"
-	"github.com/DefinedNet/dnapi/keys"
+	"github.com/MTG-Thomas/vojeto/internal/definedwire"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 )
 
 func TestGrantApprovesAllocatedAddressWithinCallerRangesAndPinsIt(t *testing.T) {
@@ -49,7 +49,7 @@ func TestGrantRangeConstraintsRejectUnapprovedAllocation(t *testing.T) {
 				grant.Addresses = []string{"100.100.1.1"}
 			}
 			original := client.enroll
-			client.enroll = func(ctx context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+			client.enroll = func(ctx context.Context) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
 				data, key, credentials, meta, err := original(ctx)
 				switch kind {
 				case "malformed allocation":

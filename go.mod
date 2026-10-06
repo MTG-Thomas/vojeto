@@ -3,9 +3,9 @@ module github.com/MTG-Thomas/vojeto
 go 1.26.3
 
 require (
-	github.com/DefinedNet/dnapi v0.0.0-20260923144923-a6881518ac25
 	github.com/slackhq/nebula v1.11.2
 	go.yaml.in/yaml/v3 v3.0.4
+	golang.org/x/sys v0.48.0
 	gvisor.dev/gvisor v0.0.0-20240423190808-9d7a357edefe
 )
 
@@ -38,7 +38,6 @@ require (
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
@@ -46,5 +45,4 @@ require (
 	golang.zx2c4.com/wireguard v0.0.0-20230325221338-052af4a8072b // indirect
 	golang.zx2c4.com/wireguard/windows v1.0.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

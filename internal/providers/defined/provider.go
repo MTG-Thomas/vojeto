@@ -3,7 +3,7 @@ package defined
 import (
 	"context"
 	"errors"
-	"github.com/DefinedNet/dnapi/keys"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 	"github.com/MTG-Thomas/vojeto/internal/identity"
 	"sync"
 	"sync/atomic"
@@ -28,7 +28,7 @@ type Provider struct {
 	client          pooledDNClient
 	network         string
 	state           *identityState
-	credentials     *keys.Credentials
+	credentials     *wirekeys.Credentials
 	current         *identity.Identity
 	unsafe          bool
 	options         ProviderOptions

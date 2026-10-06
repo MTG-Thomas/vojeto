@@ -26,6 +26,8 @@ jobs:
         run: |
           docker build --target peer-proof --tag vojeto-peer-proof .
           docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges vojeto-peer-proof -test.v -test.timeout 90s
+      - name: Verify main client release license inventory
+        run: docker build --target release --tag vojeto-release .
       - name: Verify separate peer release license inventory
         run: docker build --target peer-release --tag vojeto-peer-release .
       - name: Rootless launcher lifecycle and encrypted child-process proof

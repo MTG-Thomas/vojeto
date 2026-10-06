@@ -16,17 +16,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DefinedNet/dnapi/keys"
-	"github.com/DefinedNet/dnapi/message"
+	"github.com/MTG-Thomas/vojeto/internal/definedwire"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 )
 
 func TestEnrollmentBothCurves(t *testing.T) {
-	for _, curve := range []message.NetworkCurve{message.NetworkCurve25519, message.NetworkCurveP256} {
+	for _, curve := range []definedwire.NetworkCurve{definedwire.NetworkCurve25519, definedwire.NetworkCurveP256} {
 		t.Run(string(curve), func(t *testing.T) {
-			trusted, _ := keys.TrustedKeysToPEM(clientCredentials(t, false).TrustedKeys)
-			var request message.EnrollRequest
+			trusted, _ := wirekeys.TrustedKeysToPEM(clientCredentials(t, false).TrustedKeys)
+			var request definedwire.EnrollRequest
 			c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != message.EnrollEndpoint || r.Method != http.MethodPost || strings.Contains(r.URL.String(), "fixture-code") {
+				if r.URL.Path != definedwire.EnrollEndpoint || r.Method != http.MethodPost || strings.Contains(r.URL.String(), "fixture-code") {
 					t.Error("unsafe enrollment endpoint")
 				}
 				if json.NewDecoder(r.Body).Decode(&request) != nil || request.Code != "fixture-code" || request.Hostname != "fixture-worker" || time.Since(request.Timestamp) > time.Second {
@@ -35,7 +35,7 @@ func TestEnrollmentBothCurves(t *testing.T) {
 				if len(request.HostPubkeyEd25519) == 0 || len(request.HostPubkeyP256) == 0 || len(request.NebulaPubkeyX25519) == 0 || len(request.NebulaPubkeyP256) == 0 {
 					t.Error("missing generated keys")
 				}
-				json.NewEncoder(w).Encode(map[string]any{"data": message.EnrollResponseData{HostID: "host-FIXTURE", Host: message.HostHostMetadata{ID: "host-FIXTURE", IPAddress: "192.0.2.1"}, Network: message.HostNetworkMetadata{ID: "network-FIXTURE", Curve: curve}, Counter: 1, Config: []byte("fixture-config"), TrustedKeys: trusted}})
+				json.NewEncoder(w).Encode(map[string]any{"data": definedwire.EnrollResponseData{HostID: "host-FIXTURE", Host: definedwire.HostHostMetadata{ID: "host-FIXTURE", IPAddress: "192.0.2.1"}, Network: definedwire.HostNetworkMetadata{ID: "network-FIXTURE", Curve: curve}, Counter: 1, Config: []byte("fixture-config"), TrustedKeys: trusted}})
 			})
 			data, key, credentials, meta, err := c.Enroll(context.Background(), "fixture-code", "fixture-worker")
 			if err != nil || string(data) != "fixture-config" || len(key) == 0 || credentials.HostID != "host-FIXTURE" || credentials.Counter != 1 || meta.Network.ID != "network-FIXTURE" || !reflect.DeepEqual(meta.Host.IPAddresses, []string{"192.0.2.1"}) {
@@ -43,13 +43,13 @@ func TestEnrollmentBothCurves(t *testing.T) {
 			}
 			switch private := credentials.PrivateKey.Unwrap().(type) {
 			case ed25519.PrivateKey:
-				public, _, err := keys.UnmarshalHostEd25519PublicKey(request.HostPubkeyEd25519)
-				if curve != message.NetworkCurve25519 || err != nil || !reflect.DeepEqual(public, private.Public()) {
+				public, _, err := wirekeys.UnmarshalHostEd25519PublicKey(request.HostPubkeyEd25519)
+				if curve != definedwire.NetworkCurve25519 || err != nil || !reflect.DeepEqual(public, private.Public()) {
 					t.Fatal("wrong signing key")
 				}
 			case *ecdsa.PrivateKey:
-				public, _, err := keys.UnmarshalHostP256PublicKey(request.HostPubkeyP256)
-				if curve != message.NetworkCurveP256 || err != nil || !public.Equal(&private.PublicKey) {
+				public, _, err := wirekeys.UnmarshalHostP256PublicKey(request.HostPubkeyP256)
+				if curve != definedwire.NetworkCurveP256 || err != nil || !public.Equal(&private.PublicKey) {
 					t.Fatal("wrong signing key")
 				}
 			default:
@@ -115,7 +115,7 @@ func TestEnrollmentCancellationAndInputBounds(t *testing.T) {
 }
 
 func TestEnrollmentRejectsIncompleteIdentityMetadata(t *testing.T) {
-	trusted, _ := keys.TrustedKeysToPEM(clientCredentials(t, false).TrustedKeys)
+	trusted, _ := wirekeys.TrustedKeysToPEM(clientCredentials(t, false).TrustedKeys)
 	for _, change := range []struct {
 		name   string
 		mutate func(map[string]any)
@@ -150,13 +150,13 @@ func TestEnrollmentWithP256OnlyKeys(t *testing.T) {
 		}
 		return
 	}
-	trusted, _ := keys.TrustedKeysToPEM(clientCredentials(t, true).TrustedKeys)
+	trusted, _ := wirekeys.TrustedKeysToPEM(clientCredentials(t, true).TrustedKeys)
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		var request message.EnrollRequest
+		var request definedwire.EnrollRequest
 		if json.NewDecoder(r.Body).Decode(&request) != nil || len(request.HostPubkeyEd25519) != 0 || len(request.NebulaPubkeyX25519) != 0 || len(request.HostPubkeyP256) == 0 || len(request.NebulaPubkeyP256) == 0 {
 			t.Error("P256-only request incorrect")
 		}
-		json.NewEncoder(w).Encode(map[string]any{"data": message.EnrollResponseData{HostID: "host-FIXTURE", Host: message.HostHostMetadata{ID: "host-FIXTURE", IPAddress: "192.0.2.1"}, Network: message.HostNetworkMetadata{ID: "network-FIXTURE", Curve: message.NetworkCurveP256}, Counter: 1, Config: []byte("fixture-config"), TrustedKeys: trusted}})
+		json.NewEncoder(w).Encode(map[string]any{"data": definedwire.EnrollResponseData{HostID: "host-FIXTURE", Host: definedwire.HostHostMetadata{ID: "host-FIXTURE", IPAddress: "192.0.2.1"}, Network: definedwire.HostNetworkMetadata{ID: "network-FIXTURE", Curve: definedwire.NetworkCurveP256}, Counter: 1, Config: []byte("fixture-config"), TrustedKeys: trusted}})
 	})
 	_, key, credentials, _, err := c.Enroll(context.Background(), "fixture-code", "")
 	if err != nil || len(key) == 0 || credentials == nil {

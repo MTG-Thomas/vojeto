@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DefinedNet/dnapi"
-	"github.com/DefinedNet/dnapi/keys"
+	"github.com/MTG-Thomas/vojeto/internal/definedwire"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -66,10 +66,10 @@ func (s *grantTestStore) BeginEnrollment(context.Context) error { s.begins++; re
 type grantTestClient struct {
 	scriptClient
 	enrollCalls int
-	enroll      func(context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error)
+	enroll      func(context.Context) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error)
 }
 
-func (c *grantTestClient) Enroll(ctx context.Context, code, hostname string) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+func (c *grantTestClient) Enroll(ctx context.Context, code, hostname string) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
 	c.enrollCalls++
 	if code != "fixture-code" || hostname != "fixture-worker" {
 		return nil, nil, nil, nil, errors.New("bad fixture request")
@@ -88,7 +88,7 @@ func grantFixture(t *testing.T) (*Provider, *grantTestStore, *grantTestClient, *
 	grant := &EnrollmentGrant{Code: "fixture-code", HostID: state.HostID, NetworkID: "network-FIXTURE", Addresses: state.Addresses, RoutePolicy: []byte("{}")}
 	store := &grantTestStore{expectedHost: state.HostID, expectedNetwork: "network-FIXTURE"}
 	client := &grantTestClient{scriptClient: scriptClient{fakePooledDN: dn, check: func(context.Context) (bool, error) { return false, nil }}}
-	client.enroll = func(context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+	client.enroll = func(context.Context) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
 		if store.binds != 1 || store.boundHost != state.HostID || store.boundNetwork != "network-FIXTURE" {
 			t.Error("code submitted before durable host/network binding")
 		}
@@ -138,7 +138,7 @@ func TestGrantProviderQuarantinesRejectedCandidate(t *testing.T) {
 			if kind == "certificate address" {
 				grant.Addresses = []string{"100.100.1.9"}
 			}
-			client.enroll = func(ctx context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+			client.enroll = func(ctx context.Context) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
 				data, key, credentials, meta, err := original(ctx)
 				switch kind {
 				case "host":

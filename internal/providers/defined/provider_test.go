@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/DefinedNet/dnapi"
-	"github.com/DefinedNet/dnapi/keys"
+	"github.com/MTG-Thomas/vojeto/internal/definedwire"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 	"github.com/MTG-Thomas/vojeto/internal/identity"
 	"github.com/MTG-Thomas/vojeto/internal/network"
 	"github.com/MTG-Thomas/vojeto/internal/runtime"
@@ -46,13 +46,13 @@ func (s *testStore) Valid() bool                                  { return s.val
 type scriptClient struct {
 	fakePooledDN
 	check  func(context.Context) (bool, error)
-	update func(context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error)
+	update func(context.Context) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error)
 }
 
-func (c scriptClient) CheckForUpdate(ctx context.Context, _ keys.Credentials) (bool, error) {
+func (c scriptClient) CheckForUpdate(ctx context.Context, _ wirekeys.Credentials) (bool, error) {
 	return c.check(ctx)
 }
-func (c scriptClient) DoUpdate(ctx context.Context, credentials keys.Credentials) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+func (c scriptClient) DoUpdate(ctx context.Context, credentials wirekeys.Credentials) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
 	if c.update != nil {
 		return c.update(ctx)
 	}
@@ -130,7 +130,7 @@ func TestCancelledProviderRotationIsUnsafe(t *testing.T) {
 		t.Fatal(e)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	c.update = func(context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
+	c.update = func(context.Context) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
 		cancel()
 		return nil, nil, nil, nil, ctx.Err()
 	}

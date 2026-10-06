@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DefinedNet/dnapi"
-	"github.com/DefinedNet/dnapi/keys"
+	"github.com/MTG-Thomas/vojeto/internal/definedwire"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 	"github.com/slackhq/nebula"
 	"github.com/slackhq/nebula/cert"
 	"github.com/slackhq/nebula/config"
@@ -51,7 +51,7 @@ type EnrollmentStore interface {
 
 type EnrollmentClient interface {
 	pooledDNClient
-	Enroll(context.Context, string, string) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error)
+	Enroll(context.Context, string, string) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error)
 }
 
 // NewEnrollmentProvider initializes a fresh fenced grant, then delegates polling,
@@ -147,7 +147,7 @@ func (s *grantStore) Acquire(ctx context.Context) ([]byte, error) {
 		}
 		expected[ip] = true
 	}
-	data, err = dnapi.InsertConfigPrivateKey(data, key)
+	data, err = definedwire.InsertConfigPrivateKey(data, key)
 	if err != nil {
 		return reject()
 	}

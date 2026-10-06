@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/DefinedNet/dnapi/keys"
+	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
 	"io"
 	"regexp"
 )
@@ -23,7 +23,7 @@ type identityState struct {
 
 const maximumIdentityStateBytes = 1024 * 1024
 
-func encodeIdentityState(hostID string, addresses []string, config []byte, credentials *keys.Credentials) ([]byte, error) {
+func encodeIdentityState(hostID string, addresses []string, config []byte, credentials *wirekeys.Credentials) ([]byte, error) {
 	if credentials == nil || credentials.HostID != hostID || credentials.PrivateKey == nil || len(credentials.TrustedKeys) == 0 {
 		return nil, errors.New("invalid identity credentials")
 	}
@@ -31,7 +31,7 @@ func encodeIdentityState(hostID string, addresses []string, config []byte, crede
 	if err != nil {
 		return nil, errors.New("identity private key encoding failed")
 	}
-	trusted, err := keys.TrustedKeysToPEM(credentials.TrustedKeys)
+	trusted, err := wirekeys.TrustedKeysToPEM(credentials.TrustedKeys)
 	if err != nil {
 		return nil, errors.New("identity trust encoding failed")
 	}
@@ -46,7 +46,7 @@ func encodeIdentityState(hostID string, addresses []string, config []byte, crede
 	return encoded, nil
 }
 
-func decodeIdentityState(encoded []byte) (*identityState, *keys.Credentials, error) {
+func decodeIdentityState(encoded []byte) (*identityState, *wirekeys.Credentials, error) {
 	if len(encoded) == 0 || len(encoded) > maximumIdentityStateBytes {
 		return nil, nil, errors.New("identity state size rejected")
 	}
@@ -59,23 +59,23 @@ func decodeIdentityState(encoded []byte) (*identityState, *keys.Credentials, err
 	if state.Version != 1 || !regexp.MustCompile(`^host-[A-Z0-9]+$`).MatchString(state.HostID) || len(state.Config) == 0 || len(state.Addresses) == 0 {
 		return nil, nil, errors.New("identity state metadata rejected")
 	}
-	private, remainder, err := keys.UnmarshalHostPrivateKey(state.PrivateKey)
+	private, remainder, err := wirekeys.UnmarshalHostPrivateKey(state.PrivateKey)
 	if err != nil || len(bytes.TrimSpace(remainder)) != 0 {
 		return nil, nil, errors.New("identity private key rejected")
 	}
-	trusted, err := keys.TrustedKeysFromPEM(state.TrustedKeys)
+	trusted, err := wirekeys.TrustedKeysFromPEM(state.TrustedKeys)
 	if err != nil || len(trusted) == 0 {
 		return nil, nil, errors.New("identity trust rejected")
 	}
-	return &state, &keys.Credentials{HostID: state.HostID, PrivateKey: private, Counter: state.Counter, TrustedKeys: trusted}, nil
+	return &state, &wirekeys.Credentials{HostID: state.HostID, PrivateKey: private, Counter: state.Counter, TrustedKeys: trusted}, nil
 }
 
 // EncodeState serializes secret SDK credentials for an exclusive state store.
-func EncodeState(host string, addresses []string, config []byte, c *keys.Credentials) ([]byte, error) {
+func EncodeState(host string, addresses []string, config []byte, c *wirekeys.Credentials) ([]byte, error) {
 	return encodeIdentityState(host, addresses, config, c)
 }
 
 // DecodeState validates a bounded secret checkpoint.
-func DecodeState(data []byte) (*identityState, *keys.Credentials, error) {
+func DecodeState(data []byte) (*identityState, *wirekeys.Credentials, error) {
 	return decodeIdentityState(data)
 }
