@@ -59,15 +59,26 @@ type Listener struct {
 	cancel        context.CancelFunc
 }
 
-func Open(ctx context.Context, n network.Network, c Config, global *Limit) (*Listener, error) {
+// Validate checks a forward without binding sockets or opening overlay traffic.
+func Validate(c Config) error {
 	a, e := netip.ParseAddrPort(c.Listen)
 	if e != nil || !a.Addr().IsLoopback() {
-		return nil, errors.New("explicit loopback listener required")
+		return errors.New("explicit loopback listener required")
 	}
 	h, p, e := net.SplitHostPort(c.Target)
 	port, pe := strconv.Atoi(p)
-	if e != nil || h == "" || pe != nil || port < 1 || port > 65535 || c.Name == "" || c.MaxConnections < 1 || c.DialTimeout <= 0 || global == nil {
-		return nil, errors.New("invalid forward configuration")
+	if e != nil || h == "" || pe != nil || port < 1 || port > 65535 || c.Name == "" || c.MaxConnections < 1 || c.DialTimeout <= 0 {
+		return errors.New("invalid forward configuration")
+	}
+	return nil
+}
+
+func Open(ctx context.Context, n network.Network, c Config, global *Limit) (*Listener, error) {
+	if err := Validate(c); err != nil {
+		return nil, err
+	}
+	if global == nil {
+		return nil, errors.New("connection limit required")
 	}
 	ln, e := net.Listen("tcp", c.Listen)
 	if e != nil {

@@ -63,3 +63,21 @@ record idle RSS, static startup, 10/100/500 sessions, sustained transfer CPU and
 drain. Real provider acquisition, reconnect latency and platform budgets still
 need measurement before documenting supported budgets. No platform
 named in the project intent is certified by these loopback Linux tests alone.
+
+## Read-only consumer preflight
+
+`vojeto -check-config` validates the provider settings, poll schedule, session
+policy, readiness configuration, runtime bounds and health bind policy using the
+same loaders as normal startup. Supply the usual configuration paths and flags.
+It exits before identity acquisition, network probes, listener binding, checkpoint
+writes or control socket creation. The public result sets `runtimeVerified:false`.
+It does not establish live pool membership, credential/certificate validity,
+reachability, available listening ports or platform acceptance. Static identity
+state is still read and verified during actual startup. External-agent socket
+permissions are checked by its constructor; the agent receives no operation.
+
+Fixed-forward parsing is bounded to 64 KiB/128 entries and rejects unknown fields,
+trailing JSON, invalid loopback binds, invalid ports/durations, duplicate names
+and duplicate canonical listeners before acquiring an identity. Go durations in
+forward JSON remain integer nanoseconds, not strings. This preflight prevents a
+bad deployment configuration from consuming and quarantining a valid pool slot.
