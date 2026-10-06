@@ -26,6 +26,8 @@ jobs:
         run: |
           docker build --target peer-proof --tag vojeto-peer-proof .
           docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges vojeto-peer-proof -test.v -test.timeout 90s
+      - name: Verify main client release license inventory
+        run: docker build --target release --tag vojeto-release .
       - name: Verify separate peer release license inventory
         run: docker build --target peer-release --tag vojeto-peer-release .
       - name: Rootless launcher lifecycle and encrypted child-process proof
@@ -41,5 +43,5 @@ jobs:
         run: docker build --target runtime --build-arg TARGETARCH=arm64 --tag vojeto-arm64 .
       - name: Verify rootless image default
         run: test "$(docker inspect --format '{{.Config.User}}' vojeto-arm64)" = '65532:65532'
-# Publication is intentionally gated on the dependency-license inventory (#10).
+# Publication requires the release dependency-license inventory to pass.
 # Build success here is source evidence, not platform runtime acceptance.
