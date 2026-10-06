@@ -3,8 +3,8 @@ package defined
 import (
 	"context"
 	"errors"
-	"github.com/MTG-Thomas/vojeto/internal/definedwire"
-	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
+	"github.com/DefinedNet/dnapi"
+	"github.com/DefinedNet/dnapi/keys"
 	"github.com/slackhq/nebula"
 	"github.com/slackhq/nebula/config"
 	"io"
@@ -13,14 +13,14 @@ import (
 )
 
 type pooledDNClient interface {
-	CheckForUpdate(context.Context, wirekeys.Credentials) (bool, error)
-	DoUpdate(context.Context, wirekeys.Credentials) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error)
+	CheckForUpdate(context.Context, keys.Credentials) (bool, error)
+	DoUpdate(context.Context, keys.Credentials) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error)
 }
 
 // A successful SDK update rotates credentials remotely. Checkpoint them first,
 // even when the accompanying route/config is refused. Never persist/apply a new
 // route or host identity implicitly, and never apply an uncheckpointed config.
-func refreshPooledIdentity(ctx context.Context, dn pooledDNClient, state *identityState, credentials **wirekeys.Credentials,
+func refreshPooledIdentity(ctx context.Context, dn pooledDNClient, state *identityState, credentials **keys.Credentials,
 	expectedNetwork string, checkpoint func([]byte) error, apply func([]byte) error) error {
 	data, key, next, meta, err := dn.DoUpdate(ctx, **credentials)
 	if err != nil || next == nil || next.HostID != state.HostID || next.Counter <= (*credentials).Counter {
@@ -34,7 +34,7 @@ func refreshPooledIdentity(ctx context.Context, dn pooledDNClient, state *identi
 	if meta == nil || meta.Host.ID != state.HostID || meta.Network.ID != expectedNetwork || !reflect.DeepEqual(meta.Host.IPAddresses, state.Addresses) {
 		return errors.New("pooled identity changed")
 	}
-	data, err = definedwire.InsertConfigPrivateKey(data, key)
+	data, err = dnapi.InsertConfigPrivateKey(data, key)
 	if err != nil {
 		return errors.New("pooled private key insertion failed")
 	}

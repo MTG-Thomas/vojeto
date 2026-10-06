@@ -2,24 +2,24 @@ package defined
 
 import (
 	"bytes"
-	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
+	"github.com/DefinedNet/dnapi/keys"
 	"testing"
 )
 
 func TestIdentityCheckpointPreservesRotatedSDKCredentials(t *testing.T) {
-	generated, err := wirekeys.New()
+	generated, err := keys.New()
 	if err != nil {
 		t.Fatal("key generation failed")
 	}
-	for _, private := range []wirekeys.PrivateKey{generated.HostEd25519PrivateKey, generated.HostP256PrivateKey} {
+	for _, private := range []keys.PrivateKey{generated.HostEd25519PrivateKey, generated.HostP256PrivateKey} {
 		if private == nil {
 			continue
 		} // SDK omits Ed25519 in FIPS-only mode.
-		trusted, err := wirekeys.NewTrustedKey(private.Public().Unwrap())
+		trusted, err := keys.NewTrustedKey(private.Public().Unwrap())
 		if err != nil {
 			t.Fatal("trust fixture failed")
 		}
-		original := &wirekeys.Credentials{HostID: "host-IDENTITYTEST", Counter: 17, PrivateKey: private, TrustedKeys: []wirekeys.TrustedKey{trusted}}
+		original := &keys.Credentials{HostID: "host-IDENTITYTEST", Counter: 17, PrivateKey: private, TrustedKeys: []keys.TrustedKey{trusted}}
 		encoded, err := encodeIdentityState(original.HostID, []string{"100.100.1.1"}, []byte("fixture config"), original)
 		if err != nil {
 			t.Fatal("identity checkpoint failed")
@@ -45,11 +45,11 @@ func TestIdentityCheckpointRejectsAmbiguousAndForeignState(t *testing.T) {
 			t.Fatal("invalid identity state accepted")
 		}
 	}
-	generated, err := wirekeys.New()
+	generated, err := keys.New()
 	if err != nil {
 		t.Fatal("key generation failed")
 	}
-	if _, err := encodeIdentityState("host-EXPECTED", []string{"100.100.1.1"}, []byte("config"), &wirekeys.Credentials{HostID: "host-FOREIGN", PrivateKey: generated.HostP256PrivateKey}); err == nil {
+	if _, err := encodeIdentityState("host-EXPECTED", []string{"100.100.1.1"}, []byte("config"), &keys.Credentials{HostID: "host-FOREIGN", PrivateKey: generated.HostP256PrivateKey}); err == nil {
 		t.Fatal("foreign SDK identity accepted")
 	}
 }

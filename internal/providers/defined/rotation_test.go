@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MTG-Thomas/vojeto/internal/definedwire"
-	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
+	"github.com/DefinedNet/dnapi"
+	"github.com/DefinedNet/dnapi/keys"
 	"github.com/slackhq/nebula/cert"
 	"github.com/slackhq/nebula/cert_test"
 	"go.yaml.in/yaml/v3"
@@ -17,18 +17,18 @@ import (
 
 type fakePooledDN struct {
 	data, key []byte
-	next      *wirekeys.Credentials
-	meta      *definedwire.ConfigMeta
+	next      *keys.Credentials
+	meta      *dnapi.ConfigMeta
 }
 
-func (f fakePooledDN) CheckForUpdate(context.Context, wirekeys.Credentials) (bool, error) {
+func (f fakePooledDN) CheckForUpdate(context.Context, keys.Credentials) (bool, error) {
 	return true, nil
 }
-func (f fakePooledDN) DoUpdate(context.Context, wirekeys.Credentials) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
+func (f fakePooledDN) DoUpdate(context.Context, keys.Credentials) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
 	return f.data, f.key, f.next, f.meta, nil
 }
 
-func pooledRenewalFixture(t *testing.T) (*identityState, *wirekeys.Credentials, fakePooledDN) {
+func pooledRenewalFixture(t *testing.T) (*identityState, *keys.Credentials, fakePooledDN) {
 	t.Helper()
 	ca, _, signing, _ := cert_test.NewTestCaCert(cert.Version2, cert.Curve_CURVE25519, time.Now().Add(-time.Minute), time.Now().Add(2*time.Hour), nil, nil, nil)
 	caPEM, err := ca.MarshalPEM()
@@ -55,7 +55,7 @@ func pooledRenewalFixture(t *testing.T) (*identityState, *wirekeys.Credentials, 
 	if err != nil {
 		t.Fatal("rotated fixture failed")
 	}
-	meta := &definedwire.ConfigMeta{Host: definedwire.ConfigHost{ID: state.HostID, IPAddresses: state.Addresses}, Network: definedwire.ConfigNetwork{ID: "network-FIXTURE"}}
+	meta := &dnapi.ConfigMeta{Host: dnapi.ConfigHost{ID: state.HostID, IPAddresses: state.Addresses}, Network: dnapi.ConfigNetwork{ID: "network-FIXTURE"}}
 	return state, old, fakePooledDN{nextConfig, nextKey, next, meta}
 }
 
@@ -137,16 +137,16 @@ func TestPooledRenewalRefusesReloadAfterCheckpointFailure(t *testing.T) {
 
 func fixtureState(t *testing.T, host string, counter uint) []byte {
 	t.Helper()
-	generated, err := wirekeys.New()
+	generated, err := keys.New()
 	if err != nil {
 		t.Fatal("key generation failed")
 	}
-	trust, err := wirekeys.NewTrustedKey(generated.HostP256PrivateKey.Public().Unwrap())
+	trust, err := keys.NewTrustedKey(generated.HostP256PrivateKey.Public().Unwrap())
 	if err != nil {
 		t.Fatal("trust generation failed")
 	}
-	data, err := encodeIdentityState(host, []string{"100.100.1.1"}, []byte("fixture config"), &wirekeys.Credentials{
-		HostID: host, Counter: counter, PrivateKey: generated.HostP256PrivateKey, TrustedKeys: []wirekeys.TrustedKey{trust}})
+	data, err := encodeIdentityState(host, []string{"100.100.1.1"}, []byte("fixture config"), &keys.Credentials{
+		HostID: host, Counter: counter, PrivateKey: generated.HostP256PrivateKey, TrustedKeys: []keys.TrustedKey{trust}})
 	if err != nil {
 		t.Fatal("state fixture failed")
 	}

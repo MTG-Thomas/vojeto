@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
+	"github.com/DefinedNet/dnapi/keys"
 )
 
 type poolRoundTrip func(*http.Request) (*http.Response, error)
@@ -41,16 +41,16 @@ func poolFixture(t *testing.T, handler http.HandlerFunc, app string, hosts []str
 
 func fixtureState(t *testing.T, host string, counter uint) []byte {
 	t.Helper()
-	generated, err := wirekeys.New()
+	generated, err := keys.New()
 	if err != nil {
 		t.Fatal("key generation failed")
 	}
-	trust, err := wirekeys.NewTrustedKey(generated.HostP256PrivateKey.Public().Unwrap())
+	trust, err := keys.NewTrustedKey(generated.HostP256PrivateKey.Public().Unwrap())
 	if err != nil {
 		t.Fatal("trust generation failed")
 	}
-	data, err := defined.EncodeState(host, []string{"100.100.1.1"}, []byte("fixture config"), &wirekeys.Credentials{
-		HostID: host, Counter: counter, PrivateKey: generated.HostP256PrivateKey, TrustedKeys: []wirekeys.TrustedKey{trust}})
+	data, err := defined.EncodeState(host, []string{"100.100.1.1"}, []byte("fixture config"), &keys.Credentials{
+		HostID: host, Counter: counter, PrivateKey: generated.HostP256PrivateKey, TrustedKeys: []keys.TrustedKey{trust}})
 	if err != nil {
 		t.Fatal("state fixture failed")
 	}

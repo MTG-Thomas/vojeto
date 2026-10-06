@@ -3,8 +3,8 @@ package azure
 import (
 	"context"
 	"errors"
-	"github.com/MTG-Thomas/vojeto/internal/definedwire"
-	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
+	"github.com/DefinedNet/dnapi"
+	"github.com/DefinedNet/dnapi/keys"
 	"github.com/MTG-Thomas/vojeto/internal/forward"
 	"github.com/MTG-Thomas/vojeto/internal/network"
 	"github.com/MTG-Thomas/vojeto/internal/providers/defined"
@@ -20,10 +20,10 @@ import (
 
 type unchangedClient struct{}
 
-func (unchangedClient) CheckForUpdate(context.Context, wirekeys.Credentials) (bool, error) {
+func (unchangedClient) CheckForUpdate(context.Context, keys.Credentials) (bool, error) {
 	return false, nil
 }
-func (unchangedClient) DoUpdate(context.Context, wirekeys.Credentials) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
+func (unchangedClient) DoUpdate(context.Context, keys.Credentials) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
 	return nil, nil, nil, nil, errors.New("unexpected update")
 }
 

@@ -3,8 +3,8 @@ package defined
 import (
 	"context"
 	"errors"
-	"github.com/MTG-Thomas/vojeto/internal/definedwire"
-	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
+	"github.com/DefinedNet/dnapi"
+	"github.com/DefinedNet/dnapi/keys"
 	"github.com/MTG-Thomas/vojeto/internal/forward"
 	"github.com/MTG-Thomas/vojeto/internal/identity"
 	"github.com/MTG-Thomas/vojeto/internal/network"
@@ -123,7 +123,7 @@ func TestGraceNeverCoversUnknownErrorsRotationOrLeaseLoss(t *testing.T) {
 			s.valid.Store(false)
 			c.check = func(context.Context) (bool, error) { return false, ErrTransientPoll }
 		case "rotation":
-			c.update = func(context.Context) ([]byte, []byte, *wirekeys.Credentials, *definedwire.ConfigMeta, error) {
+			c.update = func(context.Context) ([]byte, []byte, *keys.Credentials, *dnapi.ConfigMeta, error) {
 				return nil, nil, nil, nil, ErrTransientPoll
 			}
 		}

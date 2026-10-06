@@ -17,13 +17,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MTG-Thomas/vojeto/internal/definedwire"
-	wirekeys "github.com/MTG-Thomas/vojeto/internal/definedwire/credentials"
+	"github.com/DefinedNet/dnapi/keys"
+	"github.com/DefinedNet/dnapi/message"
 )
 
-func clientCredentials(t *testing.T, p256 bool) wirekeys.Credentials {
+func clientCredentials(t *testing.T, p256 bool) keys.Credentials {
 	t.Helper()
-	k, e := wirekeys.New()
+	k, e := keys.New()
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -32,11 +32,11 @@ func clientCredentials(t *testing.T, p256 bool) wirekeys.Credentials {
 	if p256 {
 		private, public = k.HostP256PrivateKey, k.HostP256PublicKey
 	}
-	trusted, e := wirekeys.NewTrustedKey(public.Unwrap())
+	trusted, e := keys.NewTrustedKey(public.Unwrap())
 	if e != nil {
 		t.Fatal(e)
 	}
-	return wirekeys.Credentials{HostID: "host-FIXTURE", Counter: 17, PrivateKey: private, TrustedKeys: []wirekeys.TrustedKey{trusted}}
+	return keys.Credentials{HostID: "host-FIXTURE", Counter: 17, PrivateKey: private, TrustedKeys: []keys.TrustedKey{trusted}}
 }
 func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
@@ -48,13 +48,13 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	}
 	return c
 }
-func decodeRequest(t *testing.T, r *http.Request, credentials wirekeys.Credentials) definedwire.RequestWrapper {
+func decodeRequest(t *testing.T, r *http.Request, credentials keys.Credentials) message.RequestWrapper {
 	t.Helper()
-	var signed definedwire.RequestV1
+	var signed message.RequestV1
 	if json.NewDecoder(r.Body).Decode(&signed) != nil {
 		t.Error("bad request")
 	}
-	if r.URL.Path != definedwire.EndpointV1 || r.Method != http.MethodPost || signed.Counter != credentials.Counter || signed.HostID != credentials.HostID {
+	if r.URL.Path != message.EndpointV1 || r.Method != http.MethodPost || signed.Counter != credentials.Counter || signed.HostID != credentials.HostID {
 		t.Error("request metadata")
 	}
 	if !credentials.TrustedKeys[0].Verify([]byte(signed.Message), signed.Signature) {
@@ -64,7 +64,7 @@ func decodeRequest(t *testing.T, r *http.Request, credentials wirekeys.Credentia
 	if e != nil {
 		t.Error(e)
 	}
-	var wrapper definedwire.RequestWrapper
+	var wrapper message.RequestWrapper
 	if json.Unmarshal(raw, &wrapper) != nil {
 		t.Error("request wrapper")
 	}
@@ -75,10 +75,10 @@ func TestClientPolling(t *testing.T) {
 	for _, available := range []bool{false, true} {
 		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 			request := decodeRequest(t, r, credentials)
-			if request.Type != definedwire.CheckForUpdate {
+			if request.Type != message.CheckForUpdate {
 				t.Error("wrong operation")
 			}
-			json.NewEncoder(w).Encode(definedwire.CheckForUpdateResponseWrapper{Data: definedwire.CheckForUpdateResponse{UpdateAvailable: available}})
+			json.NewEncoder(w).Encode(message.CheckForUpdateResponseWrapper{Data: message.CheckForUpdateResponse{UpdateAvailable: available}})
 		})
 		got, e := c.CheckForUpdate(context.Background(), credentials)
 		if e != nil || got != available {
@@ -145,10 +145,10 @@ func TestClientRotationVerification(t *testing.T) {
 				credentials := clientCredentials(t, p256)
 				c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 					wrapped := decodeRequest(t, r, credentials)
-					if wrapped.Type != definedwire.DoUpdate {
+					if wrapped.Type != message.DoUpdate {
 						t.Error("wrong operation")
 					}
-					var request definedwire.DoUpdateRequest
+					var request message.DoUpdateRequest
 					if json.Unmarshal(wrapped.Value, &request) != nil {
 						t.Error("invalid update")
 					}
@@ -161,8 +161,8 @@ func TestClientRotationVerification(t *testing.T) {
 					if !p256 && (len(request.HostPubkeyEd25519) == 0 || len(request.NebulaPubkeyX25519) == 0) {
 						t.Error("missing 25519 keys")
 					}
-					trusted, _ := wirekeys.TrustedKeysToPEM(credentials.TrustedKeys)
-					result := definedwire.DoUpdateResponse{Config: []byte("fixture-config"), Counter: 18, Nonce: request.Nonce, TrustedKeys: trusted, Host: definedwire.HostHostMetadata{ID: credentials.HostID, IPAddress: "192.0.2.1"}, Network: definedwire.HostNetworkMetadata{ID: "network-FIXTURE", Curve: definedwire.NetworkCurve25519}}
+					trusted, _ := keys.TrustedKeysToPEM(credentials.TrustedKeys)
+					result := message.DoUpdateResponse{Config: []byte("fixture-config"), Counter: 18, Nonce: request.Nonce, TrustedKeys: trusted, Host: message.HostHostMetadata{ID: credentials.HostID, IPAddress: "192.0.2.1"}, Network: message.HostNetworkMetadata{ID: "network-FIXTURE", Curve: message.NetworkCurve25519}}
 					switch fault {
 					case "nonce":
 						result.Nonce = []byte("wrong")
@@ -183,7 +183,7 @@ func TestClientRotationVerification(t *testing.T) {
 					if fault == "version" {
 						version = 2
 					}
-					json.NewEncoder(w).Encode(definedwire.SignedResponseWrapper{Data: definedwire.SignedResponse{Version: version, Message: data, Signature: signature}})
+					json.NewEncoder(w).Encode(message.SignedResponseWrapper{Data: message.SignedResponse{Version: version, Message: data, Signature: signature}})
 				})
 				config, nebula, next, meta, e := c.DoUpdate(context.Background(), credentials)
 				if fault != "" {
@@ -246,14 +246,14 @@ func TestClientUncertainRotationNeverRetries(t *testing.T) {
 	p, s, _ := providerFixture(t)
 	var updates atomic.Int32
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		var request definedwire.RequestV1
+		var request message.RequestV1
 		if json.NewDecoder(r.Body).Decode(&request) != nil {
 			t.Error("request decode")
 		}
 		data, _ := base64.StdEncoding.DecodeString(request.Message)
-		var wrapper definedwire.RequestWrapper
+		var wrapper message.RequestWrapper
 		json.Unmarshal(data, &wrapper)
-		if wrapper.Type == definedwire.CheckForUpdate {
+		if wrapper.Type == message.CheckForUpdate {
 			io.WriteString(w, `{"data":{"updateAvailable":true}}`)
 			return
 		}
@@ -286,19 +286,19 @@ func TestClientCheckpointsVerifiedCredentialsBeforeRejectingEmptyConfig(t *testi
 	old := *p.credentials
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		wrapper := decodeRequest(t, r, old)
-		if wrapper.Type == definedwire.CheckForUpdate {
+		if wrapper.Type == message.CheckForUpdate {
 			io.WriteString(w, `{"data":{"updateAvailable":true}}`)
 			return
 		}
-		var request definedwire.DoUpdateRequest
+		var request message.DoUpdateRequest
 		if json.Unmarshal(wrapper.Value, &request) != nil {
 			t.Error("request")
 		}
-		trusted, _ := wirekeys.TrustedKeysToPEM(old.TrustedKeys)
-		result := definedwire.DoUpdateResponse{Counter: old.Counter + 1, Nonce: request.Nonce, TrustedKeys: trusted, Host: definedwire.HostHostMetadata{ID: old.HostID, IPAddresses: p.state.Addresses}, Network: definedwire.HostNetworkMetadata{ID: "network-FIXTURE", Curve: definedwire.NetworkCurve25519}}
+		trusted, _ := keys.TrustedKeysToPEM(old.TrustedKeys)
+		result := message.DoUpdateResponse{Counter: old.Counter + 1, Nonce: request.Nonce, TrustedKeys: trusted, Host: message.HostHostMetadata{ID: old.HostID, IPAddresses: p.state.Addresses}, Network: message.HostNetworkMetadata{ID: "network-FIXTURE", Curve: message.NetworkCurve25519}}
 		data, _ := json.Marshal(result)
 		signature, _ := old.PrivateKey.Sign(data)
-		json.NewEncoder(w).Encode(definedwire.SignedResponseWrapper{Data: definedwire.SignedResponse{Version: 1, Message: data, Signature: signature}})
+		json.NewEncoder(w).Encode(message.SignedResponseWrapper{Data: message.SignedResponse{Version: 1, Message: data, Signature: signature}})
 	})
 	p.client = c
 	if _, e = p.Renew(context.Background(), current); !errors.Is(e, identity.ErrUnsafeRenewal) {

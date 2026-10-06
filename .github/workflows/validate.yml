@@ -43,5 +43,5 @@ jobs:
         run: docker build --target runtime --build-arg TARGETARCH=arm64 --tag vojeto-arm64 .
       - name: Verify rootless image default
         run: test "$(docker inspect --format '{{.Config.User}}' vojeto-arm64)" = '65532:65532'
-# Publication is intentionally gated on the dependency-license inventory (#10).
+# Publication requires the release dependency-license inventory to pass.
 # Build success here is source evidence, not platform runtime acceptance.

@@ -3,6 +3,7 @@ module github.com/MTG-Thomas/vojeto
 go 1.26.3
 
 require (
+	github.com/DefinedNet/dnapi v0.0.0-20261006193934-1d274612a81a
 	github.com/slackhq/nebula v1.11.2
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/sys v0.48.0
@@ -45,4 +46,5 @@ require (
 	golang.zx2c4.com/wireguard v0.0.0-20230325221338-052af4a8072b // indirect
 	golang.zx2c4.com/wireguard/windows v1.0.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
