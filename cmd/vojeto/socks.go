@@ -28,10 +28,29 @@ func loadSessions(forwardsPath, socksPath string) ([]forward.Config, *socks5.Con
 		return nil, nil, errors.New("configure exactly one of forwards or finite SOCKS")
 	}
 	if forwardsPath != "" {
-		data, err := os.ReadFile(forwardsPath)
-		var entries []forward.Config
-		if err != nil || json.Unmarshal(data, &entries) != nil || len(entries) == 0 {
+		file, err := os.Open(forwardsPath)
+		if err != nil {
 			return nil, nil, errors.New("invalid forwards")
+		}
+		defer file.Close()
+		data, err := io.ReadAll(io.LimitReader(file, 65537))
+		if err != nil || len(data) > 65536 {
+			return nil, nil, errors.New("invalid forwards")
+		}
+		var entries []forward.Config
+		decoder := json.NewDecoder(bytes.NewReader(data))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&entries) != nil || decoder.Decode(new(any)) != io.EOF || len(entries) == 0 || len(entries) > 128 {
+			return nil, nil, errors.New("invalid forwards")
+		}
+		names, listeners := map[string]bool{}, map[string]bool{}
+		for _, entry := range entries {
+			address, err := netip.ParseAddrPort(entry.Listen)
+			canonical := netip.AddrPortFrom(address.Addr().Unmap(), address.Port()).String()
+			if err != nil || forward.Validate(entry) != nil || names[entry.Name] || listeners[canonical] {
+				return nil, nil, errors.New("invalid or duplicate forwards")
+			}
+			names[entry.Name], listeners[canonical] = true, true
 		}
 		return entries, nil, nil
 	}

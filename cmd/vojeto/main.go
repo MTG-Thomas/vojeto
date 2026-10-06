@@ -22,6 +22,7 @@ import (
 )
 
 func run() error {
+	checkConfig := flag.Bool("check-config", false, "validate configuration without acquiring identity, binding sockets or network traffic")
 	config := flag.String("config", "", "secret static Nebula configuration file")
 	providerConfig := flag.String("identity-provider", "", "JSON identity-provider settings (alternative to -config)")
 	forwards := flag.String("forwards", "", "JSON array of named forwards")
@@ -60,6 +61,19 @@ func run() error {
 	settings, resolver, e := loadReadiness(*readinessFile)
 	if e != nil {
 		return e
+	}
+	if *healthListen != "" {
+		a, err := netip.ParseAddrPort(*healthListen)
+		if err != nil || (!a.Addr().IsLoopback() && !*publicHealth) {
+			return errors.New("explicit health bind required")
+		}
+	}
+	if cfg.AcquireTimeout <= 0 || cfg.RenewInterval <= 0 || cfg.RenewTimeout <= 0 || cfg.DrainTimeout <= 0 || cfg.CleanupTimeout <= 0 {
+		return errors.New("invalid runtime configuration")
+	}
+	if *checkConfig {
+		fmt.Println(`{"configuration":"valid","runtimeVerified":false}`)
+		return nil
 	}
 	completed := make(chan struct{})
 	var once sync.Once
