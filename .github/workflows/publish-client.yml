@@ -1,0 +1,43 @@
+name: Publish reviewed main client
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed main commit with successful Validate portable runtime CI
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: publish-vojeto-client
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify exact source, signature and CI
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$EXPECTED_SHA" = "$GITHUB_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.verification.verified')" = true
+          test "$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" --workflow validate.yml --event push --json status,conclusion --jq 'map(select(.status == "completed" and .conclusion == "success")) | length > 0')" = true
+      - name: Publish exact client artifact with complete dependency notices
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker build --target release --tag "ghcr.io/mtg-thomas/vojeto:$GITHUB_SHA" .
+          docker push "ghcr.io/mtg-thomas/vojeto:$GITHUB_SHA"
+          docker inspect --format '{{join .RepoDigests "\n"}}' "ghcr.io/mtg-thomas/vojeto:$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
