@@ -58,3 +58,18 @@ func TestPrivateKeyInsertion(t *testing.T) {
 		}
 	}
 }
+
+func TestNetworkCurveRejectsUnsupportedValues(t *testing.T) {
+	for _, value := range []string{`"25519"`, `"P256"`} {
+		var curve NetworkCurve
+		if json.Unmarshal([]byte(value), &curve) != nil {
+			t.Fatal("supported curve rejected")
+		}
+	}
+	for _, value := range []string{`""`, `"P384"`, `null`, `123`} {
+		var curve NetworkCurve
+		if json.Unmarshal([]byte(value), &curve) == nil {
+			t.Fatal("unsupported curve accepted", value)
+		}
+	}
+}

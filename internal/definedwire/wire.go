@@ -22,6 +22,16 @@ const (
 
 type NetworkCurve string
 
+// Only the two supported curve identifiers may enter response metadata.
+func (curve *NetworkCurve) UnmarshalJSON(data []byte) error {
+	var identifier string
+	if json.Unmarshal(data, &identifier) != nil || (identifier != string(NetworkCurve25519) && identifier != string(NetworkCurveP256)) {
+		return errors.New("unsupported network curve")
+	}
+	*curve = NetworkCurve(identifier)
+	return nil
+}
+
 const (
 	NetworkCurve25519 NetworkCurve = "25519"
 	NetworkCurveP256  NetworkCurve = "P256"
