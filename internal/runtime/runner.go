@@ -139,7 +139,7 @@ func (r *Runner) Run(ctx context.Context, completion <-chan struct{}) (result er
 		<-startupWatcherDone
 		r.fail(false)
 		_ = r.state.Transition(lifecycle.Stopped)
-		return errors.New("identity acquisition failed")
+		return errors.Join(errors.New("identity acquisition failed"), e)
 	}
 	r.mu.Lock()
 	r.current = current
@@ -281,7 +281,7 @@ func (r *Runner) Run(ctx context.Context, completion <-chan struct{}) (result er
 		if n != nil {
 			n.Close()
 		}
-		return errors.New("overlay initialization failed")
+		return errors.Join(errors.New("overlay initialization failed"), e)
 	}
 	wrapped := &managedTransport{Transport: n}
 	r.mu.Lock()
@@ -340,7 +340,7 @@ func (r *Runner) Run(ctx context.Context, completion <-chan struct{}) (result er
 	lost = r.failed
 	r.mu.Unlock()
 	if e != nil {
-		return errors.New("session initialization failed")
+		return errors.Join(errors.New("session initialization failed"), e)
 	}
 	if lost {
 		return errors.New("identity ownership lost before admission")

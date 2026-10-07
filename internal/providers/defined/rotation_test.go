@@ -152,3 +152,18 @@ func fixtureState(t *testing.T, host string, counter uint) []byte {
 	}
 	return data
 }
+
+func TestPooledRenewalAllowsRouteOrderOnlyChange(t *testing.T) {
+	state, credentials, dn := pooledRenewalFixture(t)
+	first := "    - route: 10.30.0.0/26\n      via: 100.100.0.30\n      install: true\n"
+	second := "    - route: 10.30.0.128/27\n      via: 100.100.0.30\n      install: true\n"
+	state.Config = append(state.Config, []byte("\ntun:\n  unsafe_routes:\n"+first+second)...)
+	dn.data = append(dn.data, []byte("\ntun:\n  unsafe_routes:\n"+second+first)...)
+	checkpoints := 0
+	applied := false
+	err := refreshPooledIdentity(context.Background(), dn, state, &credentials, "network-FIXTURE",
+		func([]byte) error { checkpoints++; return nil }, func([]byte) error { applied = true; return nil })
+	if err != nil || !applied || checkpoints != 2 || credentials.Counter != 18 {
+		t.Fatalf("unchanged route membership quarantined: checkpoints=%d applied=%v error=%v", checkpoints, applied, err)
+	}
+}
