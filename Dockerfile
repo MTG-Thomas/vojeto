@@ -6,7 +6,7 @@ COPY . .
 RUN scripts/prepare-nebula-patch.sh /nebula-patched /src/vojeto-patched.mod
 ENV GOFLAGS=-modfile=/src/vojeto-patched.mod
 RUN cd /nebula-patched && GOFLAGS= go test -race -run '^TestPacketCacheConcurrentCountAndTransfer$' -count=100 -timeout=2m .
-RUN go test -race -run "^TestVojetoTailProbe" -count=100 gvisor.dev/gvisor/pkg/tcpip/transport/tcp
+RUN go test -race -run "^TestVojeto" -count=100 gvisor.dev/gvisor/pkg/tcpip/transport/tcp
 RUN CGO_ENABLED=0 go build -o /vojeto-peer-tests ./cmd/vojeto-peer && chmod 0555 /vojeto-peer-tests
 ENV VOJETO_PEER_BINARY=/vojeto-peer-tests
 RUN go test -race -timeout=4m ./...

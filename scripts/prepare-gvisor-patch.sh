@@ -22,4 +22,8 @@ window_patch=$(pwd)/patches/gvisor-9d7a357edefe-small-window.patch
 printf '%s  %s\n' '36f4a73c389cb5b39a0fe5797b56faf0030f5d88aa574afe5ddb8fffbce7f19a' patches/gvisor-9d7a357edefe-zero-window-ack.patch | sha256sum -c -
 ack_patch=$(pwd)/patches/gvisor-9d7a357edefe-zero-window-ack.patch
 (cd "$destination" && git apply --check "$ack_patch" && git apply "$ack_patch")
+printf '%s  %s\n' '4ede4ee27fbf35c709e7dc1aeca4a3f98916b17e8879426f44cc5f81fc93a99f' "$original/pkg/tcpip/transport/tcp/rack.go" | sha256sum -c -
+printf '%s  %s\n' '9f7e3a9c9ab3c49dd60625b976fab0a9fdb2a5fbf5f80e4ca691ea2925b739af' patches/gvisor-9d7a357edefe-rack-pipe.patch | sha256sum -c -
+rack_patch=$(pwd)/patches/gvisor-9d7a357edefe-rack-pipe.patch
+(cd "$destination" && git apply --check "$rack_patch" && git apply "$rack_patch")
 go mod edit -modfile="$alternate" -replace="gvisor.dev/gvisor=$destination"
