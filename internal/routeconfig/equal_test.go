@@ -27,3 +27,12 @@ func TestPermutationPreservesEveryRouteAttributeAndMultiplicity(t *testing.T) {
 		t.Fatal("different absent or malformed route policy accepted")
 	}
 }
+
+func TestPermutationDoesNotNormalizeAttributeTypes(t *testing.T) {
+	a := map[string]any{"route": "10.30.0.0/26", "via": "100.100.0.30", "metric": 5}
+	b := map[string]any{"route": "10.30.0.128/27", "via": "100.100.0.30"}
+	changed := map[string]any{"route": "10.30.0.0/26", "via": "100.100.0.30", "metric": float64(5)}
+	if Equal([]any{a, b}, []any{b, changed}) {
+		t.Fatal("decoded attribute type changed")
+	}
+}

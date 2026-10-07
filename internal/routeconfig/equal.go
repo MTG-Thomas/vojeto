@@ -2,14 +2,11 @@
 // serialization order as a policy change.
 package routeconfig
 
-import (
-	"encoding/json"
-	"reflect"
-	"sort"
-)
+import "reflect"
 
-// Equal allows only permutation of identical route entries. Every attribute and
-// the number of duplicate entries remains significant; inputs are never changed.
+// Equal allows only permutation of identical route entries. Every attribute,
+// its decoded type and duplicate multiplicity remain significant. Inputs are
+// never changed; managed configuration size is bounded by the provider.
 func Equal(a, b any) bool {
 	if reflect.DeepEqual(a, b) {
 		return true
@@ -22,25 +19,21 @@ func Equal(a, b any) bool {
 	if !ok || len(left) != len(right) {
 		return false
 	}
-	canonical := func(entries []any) ([]string, bool) {
-		values := make([]string, len(entries))
-		for i, entry := range entries {
-			if _, ok := entry.(map[string]any); !ok {
-				return nil, false
-			}
-			data, err := json.Marshal(entry)
-			if err != nil {
-				return nil, false
-			}
-			values[i] = string(data)
+	used := make([]bool, len(right))
+	for _, entry := range left {
+		if _, ok := entry.(map[string]any); !ok {
+			return false
 		}
-		sort.Strings(values)
-		return values, true
+		matched := false
+		for i, candidate := range right {
+			if !used[i] && reflect.DeepEqual(entry, candidate) {
+				used[i], matched = true, true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
 	}
-	l, ok := canonical(left)
-	if !ok {
-		return false
-	}
-	r, ok := canonical(right)
-	return ok && reflect.DeepEqual(l, r)
+	return true
 }
