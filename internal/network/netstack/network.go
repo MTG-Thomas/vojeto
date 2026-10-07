@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/MTG-Thomas/vojeto/internal/routeconfig"
 	"github.com/slackhq/nebula"
 	"github.com/slackhq/nebula/config"
 	"github.com/slackhq/nebula/overlay"
@@ -21,7 +22,6 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
-	"reflect"
 	"sync"
 )
 
@@ -309,7 +309,7 @@ func reloadManagedConfig(current *config.C, data []byte, logger *slog.Logger) er
 	if next.LoadString(string(data)) != nil {
 		return errors.New("invalid configuration update")
 	}
-	if !reflect.DeepEqual(current.Get("tun.unsafe_routes"), next.Get("tun.unsafe_routes")) {
+	if !routeconfig.Equal(current.Get("tun.unsafe_routes"), next.Get("tun.unsafe_routes")) {
 		return errors.New("route change requires review")
 	}
 	if _, err := nebula.NewPKIFromConfig(logger, &next); err != nil {

@@ -152,8 +152,8 @@ func run() error {
 	return runner.Run(ctx, completed)
 }
 func main() {
-	if run() != nil {
-		fmt.Fprintln(os.Stderr, "vojeto failed; inspect configuration privately")
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "vojeto failed [%s]; inspect configuration privately\n", safeFailureCodes(err))
 		os.Exit(1)
 	}
 }

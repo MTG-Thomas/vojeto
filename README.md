@@ -182,3 +182,15 @@ externally fenced one-time grants through library interfaces. It validates the
 candidate and checkpoints it before transport starts. Broker adapters and dynamic
 enrollment CLI wiring remain deployment-integration work; existing pooled CLI
 behavior is unchanged.
+
+Managed route rotation compares exact route entries independently of their list
+order. Adding, removing or changing a route, gateway or attribute still requires
+review; duplicate multiplicity remains significant. Credentials are checkpointed
+before validating a rotated configuration, and the configuration is checkpointed
+before reload.
+
+CLI startup failures emit only bounded source-owned codes, such as
+`identity-acquisition`, `route-change`, `nebula-initialization` or
+`startup-readiness`. Private configuration, upstream response text and unknown
+error details remain suppressed. A diagnostic code does not authorize recovery
+or reuse of a quarantined identity.

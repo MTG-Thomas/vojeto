@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/DefinedNet/dnapi"
 	"github.com/DefinedNet/dnapi/keys"
+	"github.com/MTG-Thomas/vojeto/internal/routeconfig"
 	"github.com/slackhq/nebula"
 	"github.com/slackhq/nebula/config"
 	"io"
@@ -41,7 +42,7 @@ func refreshPooledIdentity(ctx context.Context, dn pooledDNClient, state *identi
 	var oldConfig, newConfig config.C
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	if oldConfig.LoadString(string(state.Config)) != nil || newConfig.LoadString(string(data)) != nil ||
-		!reflect.DeepEqual(oldConfig.Get("tun.unsafe_routes"), newConfig.Get("tun.unsafe_routes")) {
+		!routeconfig.Equal(oldConfig.Get("tun.unsafe_routes"), newConfig.Get("tun.unsafe_routes")) {
 		return errors.New("pooled route change requires review")
 	}
 	if _, err := nebula.NewPKIFromConfig(logger, &newConfig); err != nil {
