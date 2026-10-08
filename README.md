@@ -131,6 +131,9 @@ that allowance and starts bounded drain immediately.
 An optional `-control-socket /private/control.sock` enables permission-0600 Unix
 control: `POST /v1/lifecycle/complete` performs the same bounded shutdown.
 Use a private parent directory to prevent cross-user socket replacement.
+Linux finite jobs can instead use `-exec -- /absolute/executable ...` to start
+a trusted child after readiness and join network cleanup before exiting; see
+[finite workload supervision](docs/architecture/finite-workloads.md).
 
 The CLI accepts static Nebula configuration or a pre-enrolled Defined/Azure Blob
 identity pool, or a caller-owned
