@@ -40,6 +40,16 @@ func TestResourcePeer(t *testing.T) {
 		t.Fatal("peer startup failed")
 	}
 	defer peer.Close()
+	if os.Getenv("VOJETO_DEBUG_TCP") == "1" {
+		signals := make(chan os.Signal, 1)
+		signal.Notify(signals, syscall.SIGUSR1)
+		defer signal.Stop(signals)
+		go func() {
+			for range signals {
+				fmt.Fprint(os.Stderr, peer.DebugTCP())
+			}
+		}()
+	}
 	ln, err := peer.Listen("tcp", ":19001")
 	if err != nil {
 		t.Fatal(err)
@@ -121,6 +131,9 @@ func TestResourceProfile(t *testing.T) {
 	}
 	peer := exec.Command(executable, "-test.run=^TestResourcePeer$")
 	peer.Env = append(os.Environ(), "VOJETO_RESOURCE_PEER=1", "VOJETO_PEER_CONFIG="+peerPath)
+	logpeer, _ := os.Create(filepath.Join(directory, "peer-debug.log"))
+	defer logpeer.Close()
+	peer.Stderr = logpeer
 	if err := peer.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -153,6 +166,9 @@ func TestResourceProfile(t *testing.T) {
 	readiness := []byte(`{"hosts":{"peer.example":["192.0.2.1"]},"overlay":[{"target":"peer.example:19001","protocol":"tcp"}]}`)
 	client := exec.Command(binary, "-config", clientPath, "-forwards", write("forwards.json", forwards), "-readiness", write("readiness.json", readiness), "-health-listen", healthAddress, "-max-connections", "512", "-drain-timeout", "1s")
 	started := time.Now()
+	logclient, _ := os.Create(filepath.Join(directory, "client-debug.log"))
+	defer logclient.Close()
+	client.Stderr = logclient
 	if err := client.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -228,6 +244,8 @@ func TestResourceProfile(t *testing.T) {
 	}
 	// Ten streams each move 8 MiB in both directions through encrypted transport.
 	transferStart := time.Now()
+	debugTimer := time.AfterFunc(45*time.Second, func() { client.Process.Signal(syscall.SIGUSR1); peer.Process.Signal(syscall.SIGUSR1) })
+	defer debugTimer.Stop()
 	var wg sync.WaitGroup
 	type streamResult struct {
 		Index                   int
@@ -277,6 +295,14 @@ func TestResourceProfile(t *testing.T) {
 		progress = append(progress, result)
 	}
 	for err := range failures {
+		for _, name := range []string{"client", "peer"} {
+			data, _ := os.ReadFile(filepath.Join(directory, name+"-debug.log"))
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.HasPrefix(line, "[DEBUG-tcp-loss]") {
+					t.Log(name + " " + line)
+				}
+			}
+		}
 		encoded, _ := json.Marshal(progress)
 		t.Logf("resource failure stream progress: %s", encoded)
 		for _, path := range []string{"/sys/fs/cgroup/memory.events", "/sys/fs/cgroup/memory.peak", "/sys/fs/cgroup/cpu.stat", "/proc/net/snmp"} {
