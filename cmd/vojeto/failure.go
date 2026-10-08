@@ -9,11 +9,15 @@ import (
 // exact, source-owned constants become diagnostic codes; raw text never escapes.
 func safeFailureCodes(err error) string {
 	known := map[string]string{
-		"identity acquisition failed":                                          "identity-acquisition",
-		"identity startup authentication failed":                               "identity-authentication",
-		"pooled route change requires review":                                  "route-change",
-		"pooled identity changed":                                              "identity-change",
-		"pooled identity certificate rejected":                                 "identity-certificate",
+		"workload start failed":                  "workload-start",
+		"workload failed":                        "workload-failed",
+		"workload cancelled":                     "workload-cancelled",
+		"workload overlay stopped":               "workload-overlay",
+		"identity acquisition failed":            "identity-acquisition",
+		"identity startup authentication failed": "identity-authentication",
+		"pooled route change requires review":    "route-change",
+		"pooled identity changed":                "identity-change",
+		"pooled identity certificate rejected":   "identity-certificate",
 		"rotated identity checkpoint failed; operator reconciliation required": "rotation-checkpoint",
 		"pooled configuration checkpoint failed":                               "config-checkpoint",
 		"overlay initialization failed":                                        "overlay-initialization",

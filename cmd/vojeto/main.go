@@ -11,11 +11,13 @@ import (
 	"github.com/MTG-Thomas/vojeto/internal/network"
 	"github.com/MTG-Thomas/vojeto/internal/network/netstack"
 	"github.com/MTG-Thomas/vojeto/internal/runtime"
+	"github.com/MTG-Thomas/vojeto/internal/workload"
 	"net"
 	"net/http"
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -39,7 +41,16 @@ func run() error {
 	flag.DurationVar(&cfg.CleanupTimeout, "cleanup-timeout", cfg.CleanupTimeout, "checkpoint/release cleanup bound")
 	signalGrace := flag.Duration("signal-grace", 0, "native application drain allowance before stopping admission (0 disables)")
 	socket := flag.String("control-socket", "", "optional Unix control socket in a private writable directory")
+	execute := flag.Bool("exec", false, "supervise a finite Linux command supplied after --")
+	workloadTimeout := flag.Duration("workload-timeout", 15*time.Minute, "finite workload lifetime including network startup")
+	workloadGrace := flag.Duration("workload-grace", 30*time.Second, "finite child termination allowance")
 	flag.Parse()
+	if !*execute && len(flag.Args()) != 0 {
+		return errors.New("unexpected workload arguments")
+	}
+	if *execute && (!workload.Supported || len(flag.Args()) == 0 || !filepath.IsAbs(flag.Args()[0]) || *workloadTimeout <= 0 || *workloadTimeout > 24*time.Hour || *workloadGrace <= 0 || *workloadGrace > 5*time.Minute || *signalGrace != 0 || *socket != "" || *socks != "") {
+		return errors.New("invalid finite workload configuration")
+	}
 	if err := validateAdmission(*maximum, *signalGrace); err != nil {
 		return err
 	}
@@ -149,6 +160,11 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if *execute {
+		return workload.Run(ctx, readyOverlay{runner}, func(childCtx context.Context) error {
+			return workload.Execute(childCtx, flag.Args(), *workloadGrace)
+		}, *workloadTimeout)
+	}
 	return runner.Run(ctx, completed)
 }
 func main() {
@@ -156,4 +172,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "vojeto failed [%s]; inspect configuration privately\n", safeFailureCodes(err))
 		os.Exit(1)
 	}
+}
+
+// The finite child waits for the same overlay/dependency status as health probes.
+type readyOverlay struct{ *runtime.Runner }
+
+func (r readyOverlay) Ready() bool {
+	s := r.Status()
+	return s.State == "ready" && s.IdentityValid && s.OverlayReady && s.DependenciesReady
 }
