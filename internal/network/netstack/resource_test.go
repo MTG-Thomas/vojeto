@@ -46,7 +46,7 @@ func TestResourcePeer(t *testing.T) {
 		defer signal.Stop(signals)
 		go func() {
 			for range signals {
-				fmt.Fprint(os.Stderr, peer.DebugTCP())
+				fmt.Fprint(os.Stderr, peerDebugTCP())
 			}
 		}()
 	}
@@ -70,13 +70,15 @@ func TestResourcePeer(t *testing.T) {
 		if err != nil {
 			return
 		}
+		conn := trackPeerConn(c)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer c.Close()
-			stop := context.AfterFunc(ctx, func() { c.Close() })
+			defer peerConnDone()
+			defer conn.Close()
+			stop := context.AfterFunc(ctx, func() { conn.Close() })
 			defer stop()
-			io.Copy(c, c)
+			io.Copy(conn, conn)
 		}()
 	}
 }
