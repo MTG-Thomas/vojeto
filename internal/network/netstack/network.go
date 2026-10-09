@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"sync"
 )
 
@@ -156,6 +157,9 @@ func newOutboundNetwork(control *nebula.Control, d *routedDevice) (*Network, err
 		return nil, err
 	}
 	s := &Network{control: control, ipstack: ipstack, address: address}
+	if os.Getenv("VOJETO_DEBUG_TCP") == "1" {
+		debugSignals(s)
+	}
 	link := channel.New(512, 1280, "")
 	if e := s.ipstack.CreateNIC(1, link); e != nil {
 		s.ipstack.Close()
