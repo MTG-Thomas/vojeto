@@ -4,11 +4,8 @@ import (
 	"fmt"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -80,21 +77,4 @@ func debugTCPStack(s *stack.Stack) string {
 		fmt.Fprintf(&out, "[DEBUG-tcp-loss] port=%d->%d send=%d receive=%d rto=%s state=%d cc=%d cwnd=%d rtt=%s\n", local.Port, remote.Port, send, receive, info.RTO, info.State, info.CcState, info.SndCwnd, info.RTT)
 	}
 	return out.String()
-}
-
-func debugSignals(n *Network) {
-	attachTCPProbe(n.ipstack)
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGUSR1)
-	go func() {
-		defer signal.Stop(signals)
-		for {
-			select {
-			case <-n.control.Context().Done():
-				return
-			case <-signals:
-				fmt.Fprint(os.Stderr, debugTCPStack(n.ipstack))
-			}
-		}
-	}()
 }
