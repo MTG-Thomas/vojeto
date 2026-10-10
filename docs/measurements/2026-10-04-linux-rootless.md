@@ -65,8 +65,16 @@ not establish tail latency or a guaranteed maximum.
 These are local static-identity measurements, not a claim of cloud support or a
 supported 128 MiB maximum workload. Azure acquisition/checkpoint time, reconnect
 latency, cloud latency/loss, long-running memory behavior, and platform-native
-worker shutdown remain acceptance work. Total CLI CPU time covers startup, all
-round trips, sustained transfer, and shutdown. It does not isolate transfer CPU.
+worker shutdown remain acceptance work. The historical total CLI CPU time covers startup, all
+round trips, sustained transfer, and shutdown; those samples did not isolate
+transfer CPU. The current harness additionally samples the CLI process
+`/proc/<pid>/stat` user/system counters immediately before and after the ten-stream
+transfer. `cli_transfer_cpu_ticks` is their delta, excluding child CPU fields, the
+peer and driver. Record `getconf CLK_TCK` on the execution host to convert ticks
+to seconds; do not assume a clock rate from the container image. The sampling
+window includes transfer orchestration and completion bookkeeping, but excludes
+startup, connection setup and drain. This change does not alter workload or
+deadlines, and does not retroactively assign transfer CPU to the older samples.
 The test reports peak RSS before shutdown, not a continuously sampled per-stage
 peak. Deployment budgets must include their chosen concurrency and provider.
 
