@@ -1,0 +1,62 @@
+{
+  "sourceCommit": "7947f130dbe00d2be24045d84198b430cfc0668d",
+  "localMeasurementImage": "sha256:103d0943e5ddb20d07af42fb9e00d958d65cbaf5d7d34b922e2df69f2015e02e",
+  "kernel": "Linux 6.12.107+deb13-amd64 x86_64 GNU/Linux",
+  "clockTicksPerSecond": 100,
+  "container": {
+    "uid": 65532,
+    "capabilities": [],
+    "readOnly": true,
+    "cpuLimit": 1,
+    "memoryBytes": 536870912,
+    "tmpfsBytes": 16777216
+  },
+  "scope": "Static identity; local encrypted loopback; CLI, peer and driver share the container CPU/memory allowance. Three independent CLI processes, not a deployment or long-running soak.",
+  "runs": [
+    {
+      "source": "static identity; loopback encrypted Nebula; separate CLI process",
+      "rss_bytes_by_connections": {
+        "0": 27693056,
+        "10": 28577792,
+        "100": 33996800,
+        "500": 58101760
+      },
+      "startup_to_ready_seconds": 0.021125593,
+      "bidirectional_160_mib_seconds": 11.27723212,
+      "drain_seconds": 1.027766284,
+      "peak_cli_rss_bytes": 100028416,
+      "cli_total_cpu_seconds": 6.438964,
+      "cli_transfer_cpu_ticks": 593
+    },
+    {
+      "source": "static identity; loopback encrypted Nebula; separate CLI process",
+      "rss_bytes_by_connections": {
+        "0": 31813632,
+        "10": 32514048,
+        "100": 37769216,
+        "500": 58204160
+      },
+      "startup_to_ready_seconds": 0.367004468,
+      "bidirectional_160_mib_seconds": 11.430400107,
+      "drain_seconds": 1.040502439,
+      "peak_cli_rss_bytes": 100257792,
+      "cli_total_cpu_seconds": 7.142724,
+      "cli_transfer_cpu_ticks": 675
+    },
+    {
+      "source": "static identity; loopback encrypted Nebula; separate CLI process",
+      "rss_bytes_by_connections": {
+        "0": 31715328,
+        "10": 32378880,
+        "100": 40198144,
+        "500": 67010560
+      },
+      "startup_to_ready_seconds": 0.022114166,
+      "bidirectional_160_mib_seconds": 11.694926254,
+      "drain_seconds": 1.025960919,
+      "peak_cli_rss_bytes": 109084672,
+      "cli_total_cpu_seconds": 6.85012,
+      "cli_transfer_cpu_ticks": 642
+    }
+  ]
+}
