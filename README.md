@@ -103,7 +103,7 @@ An initial runnable extraction is available. Build with `make build`, verify wit
 `make test` (race detector), or build a local non-root development container with
 `docker build .`. Publication uses `docker build --target release .`, which
 collects the complete linked-license bundle and rejects missing licenses;
-that target currently stops on the unresolved Defined SDK license. The separate
+the pinned Defined SDK now includes its MIT license. The separate
 `docker build --target peer-release .` inventories only `vojeto-peer` dependencies
 and does not link the Defined SDK. Passing that gate is not live deployment proof.
 The build applies checksum-verified Nebula v1.11.2 patches for packet-cache
@@ -168,13 +168,15 @@ GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
 Repeatable local resource measurements and their limits are documented in
 [Linux rootless measurements](docs/measurements/2026-10-04-linux-rootless.md).
 The image defaults to `GOMEMLIMIT=96MiB`; this soft runtime limit does not guarantee
-RSS or prove a platform memory budget. Production publication waits for the
-Defined SDK license clarification in [dnapi#52](https://github.com/DefinedNet/dnapi/issues/52).
+RSS or prove a platform memory budget. The Defined SDK license was resolved in [dnapi#53](https://github.com/DefinedNet/dnapi/pull/53)
+and the licensed revision is pinned. Main-client publication is available through
+the gated manual workflow; publication is separate from deployment acceptance.
 
 Defined identity requests use a [bounded HTTP adapter](docs/architecture/defined-client.md)
 with redirect rejection, a 30-second request ceiling and a 2 MiB response limit.
-Polling failures remain fail-closed. SDK licensing and live deployment acceptance
-remain release blockers; this project is not yet a production replacement.
+Polling failures remain fail-closed by default. Live deployment acceptance and
+consumer ownership integration remain open; this project is not yet an accepted
+production replacement. See [production acceptance](docs/architecture/production-acceptance.md).
 
 Leased providers may opt into finite read-only control-plane outage grace using
 `pollOutageGrace` in their provider JSON. The default stays fail-closed. This never
@@ -182,9 +184,9 @@ covers uncertain rotation or lease loss; see [the outage policy](docs/architectu
 
 A [fresh enrollment provider](docs/architecture/external-enrollment.md) accepts
 externally fenced one-time grants through library interfaces. It validates the
-candidate and checkpoints it before transport starts. Broker adapters and dynamic
-enrollment CLI wiring remain deployment-integration work; existing pooled CLI
-behavior is unchanged.
+candidate and checkpoints it before transport starts. The Linux `defined-external-agent` CLI carries this contract over a private Unix
+socket; concrete broker adapters and durable ownership proof remain consumer
+integration work. Existing pooled CLI behavior is unchanged.
 
 Managed route rotation compares exact route entries independently of their list
 order. Adding, removing or changing a route, gateway or attribute still requires
