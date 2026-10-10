@@ -245,6 +245,10 @@ func TestResourceProfile(t *testing.T) {
 		measurements[count] = rss()
 	}
 	// Ten streams each move 8 MiB in both directions through encrypted transport.
+	transferCPUStart, err := processCPUTicks(client.Process.Pid)
+	if err != nil {
+		t.Fatal("CLI transfer CPU sample unavailable")
+	}
 	transferStart := time.Now()
 	debugTimer := time.AfterFunc(45*time.Second, func() { client.Process.Signal(syscall.SIGUSR1); peer.Process.Signal(syscall.SIGUSR1) })
 	defer debugTimer.Stop()
@@ -330,6 +334,10 @@ func TestResourceProfile(t *testing.T) {
 		t.Fatal("sustained transfer failed", err)
 	}
 	transfer := time.Since(transferStart)
+	transferCPUEnd, err := processCPUTicks(client.Process.Pid)
+	if err != nil || transferCPUEnd < transferCPUStart {
+		t.Fatal("CLI transfer CPU sample invalid")
+	}
 	// Retain all 500 sessions to exercise forced, bounded cleanup.
 	peakRSS := memory("VmHWM")
 	drainStart := time.Now()
@@ -349,16 +357,61 @@ func TestResourceProfile(t *testing.T) {
 		t.Fatal("CLI shutdown exceeded bound")
 	}
 	result := struct {
-		Source   string        `json:"source"`
-		RSS      map[int]int64 `json:"rss_bytes_by_connections"`
-		Startup  float64       `json:"startup_to_ready_seconds"`
-		Transfer float64       `json:"bidirectional_160_mib_seconds"`
-		Drain    float64       `json:"drain_seconds"`
-		PeakRSS  int64         `json:"peak_cli_rss_bytes"`
-		CPU      float64       `json:"cli_total_cpu_seconds"`
-	}{"static identity; loopback encrypted Nebula; separate CLI process", measurements, startup.Seconds(), transfer.Seconds(), time.Since(drainStart).Seconds(), peakRSS, (client.ProcessState.UserTime() + client.ProcessState.SystemTime()).Seconds()}
+		Source           string        `json:"source"`
+		RSS              map[int]int64 `json:"rss_bytes_by_connections"`
+		Startup          float64       `json:"startup_to_ready_seconds"`
+		Transfer         float64       `json:"bidirectional_160_mib_seconds"`
+		Drain            float64       `json:"drain_seconds"`
+		PeakRSS          int64         `json:"peak_cli_rss_bytes"`
+		CPU              float64       `json:"cli_total_cpu_seconds"`
+		TransferCPUTicks uint64        `json:"cli_transfer_cpu_ticks"`
+	}{"static identity; loopback encrypted Nebula; separate CLI process", measurements, startup.Seconds(), transfer.Seconds(), time.Since(drainStart).Seconds(), peakRSS, (client.ProcessState.UserTime() + client.ProcessState.SystemTime()).Seconds(), transferCPUEnd - transferCPUStart}
 	data, _ := json.Marshal(result)
 	t.Log(string(data))
+}
+
+func processCPUTicks(pid int) (uint64, error) {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return 0, err
+	}
+	return parseProcessCPUTicks(string(data))
+}
+
+func parseProcessCPUTicks(data string) (uint64, error) {
+	// comm is parenthesized and may itself contain spaces and parentheses.
+	end := strings.LastIndexByte(data, ')')
+	if end < 0 {
+		return 0, fmt.Errorf("invalid process stat")
+	}
+	fields := strings.Fields(data[end+1:])
+	// The suffix starts at field 3 (state); utime/stime are fields 14/15.
+	if len(fields) < 13 {
+		return 0, fmt.Errorf("incomplete process stat")
+	}
+	user, err := strconv.ParseUint(fields[11], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	system, err := strconv.ParseUint(fields[12], 10, 64)
+	if err != nil || user > ^uint64(0)-system {
+		return 0, fmt.Errorf("invalid process CPU counter")
+	}
+	return user + system, nil
+}
+
+func TestProcessCPUTicks(t *testing.T) {
+	for _, name := range []string{"vojeto", "vojeto worker", "vojeto (worker)"} {
+		got, err := parseProcessCPUTicks("123 (" + name + ") S 1 2 3 4 5 6 7 8 9 10 123 456 9999 9999")
+		if err != nil || got != 579 {
+			t.Fatalf("utime/stime sum = %d, error = %v", got, err)
+		}
+	}
+	for _, data := range []string{"", "123 (vojeto) S", "123 vojeto S 1 2 3", "123 (vojeto) S 1 2 3 4 5 6 7 8 9 10 -1 456", "123 (vojeto) S 1 2 3 4 5 6 7 8 9 10 18446744073709551615 1"} {
+		if _, err := parseProcessCPUTicks(data); err == nil {
+			t.Fatal("invalid process stat accepted")
+		}
+	}
 }
 
 type repeatReader struct{}
