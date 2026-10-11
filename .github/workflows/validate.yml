@@ -18,6 +18,14 @@ jobs:
           persist-credentials: false
       - name: License inventory regressions
         run: python3 -m unittest discover -s scripts -p test_dependency_notices.py -v
+      - name: Protected release policy regressions
+        run: python3 -m unittest discover -s scripts -p 'test_*release*.py' -v
+      - name: Install pinned signature test tool
+        uses: sigstore/cosign-installer@af595e623eec1ede52d6322f53b635d5def0a95a # pinned action source
+        with:
+          cosign-release: v3.1.3
+      - name: Reject a deliberately tampered signed fixture
+        run: bash scripts/test_cosign_tamper.sh
       - name: Race tests, patched upstream regression and native compilation
         run: docker build --target proof --tag vojeto-proof .
       - name: Rootless encrypted overlay proof

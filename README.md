@@ -169,8 +169,11 @@ Repeatable local resource measurements and their limits are documented in
 [Linux rootless measurements](docs/measurements/2026-10-04-linux-rootless.md).
 The image defaults to `GOMEMLIMIT=96MiB`; this soft runtime limit does not guarantee
 RSS or prove a platform memory budget. The Defined SDK license was resolved in [dnapi#53](https://github.com/DefinedNet/dnapi/pull/53)
-and the licensed revision is pinned. Main-client publication is available through
-the gated manual workflow; publication is separate from deployment acceptance.
+and the licensed revision is pinned. Manual publishers require an existing
+protected release environment, private package access and verified signed OCI
+evidence. Setup and actual delivery acceptance remain open; see
+[release security](docs/architecture/release-security.md). Local build/license
+success is separate from publication and deployment acceptance.
 
 Defined identity requests use a [bounded HTTP adapter](docs/architecture/defined-client.md)
 with redirect rejection, a 30-second request ceiling and a 2 MiB response limit.
