@@ -103,6 +103,16 @@ func TestResourceProfile(t *testing.T) {
 	}
 	udpPort := socket.LocalAddr().(*net.UDPAddr).Port
 	socket.Close()
+	peerEndpoint := fmt.Sprintf("127.0.0.1:%d", udpPort)
+	var faults *packetFaultProxy
+	if os.Getenv("VOJETO_PROFILE_FAULTS") == "1" {
+		faults, err = newPacketFaultProxy(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: udpPort}, 200, 97, 5*time.Millisecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer faults.Close()
+		peerEndpoint = faults.address()
+	}
 	configFor := func(ip string, peer bool) []byte {
 		_, _, private, crt := cert_test.NewTestCert(cert.Version2, cert.Curve_CURVE25519, ca, key, ip, time.Now().Add(-time.Minute), time.Now().Add(30*time.Minute), []netip.Prefix{netip.PrefixFrom(netip.MustParseAddr(ip), 24)}, nil, nil)
 		port := 0
@@ -111,7 +121,7 @@ func TestResourceProfile(t *testing.T) {
 			port = udpPort
 			hosts = nil
 		}
-		cfg := map[string]any{"pki": map[string]any{"ca": string(caPEM), "cert": string(crt), "key": string(private)}, "listen": map[string]any{"host": "127.0.0.1", "port": port}, "lighthouse": map[string]any{"am_lighthouse": peer, "hosts": hosts}, "static_host_map": map[string]any{"192.0.2.1": []string{fmt.Sprintf("127.0.0.1:%d", udpPort)}}, "firewall": map[string]any{"outbound": []map[string]any{{"port": 19001, "proto": "tcp", "host": "any"}}, "inbound": []map[string]any{{"port": 19001, "proto": "tcp", "host": "any"}}}, "handshakes": map[string]any{"try_interval": "100ms"}}
+		cfg := map[string]any{"pki": map[string]any{"ca": string(caPEM), "cert": string(crt), "key": string(private)}, "listen": map[string]any{"host": "127.0.0.1", "port": port}, "lighthouse": map[string]any{"am_lighthouse": peer, "hosts": hosts}, "static_host_map": map[string]any{"192.0.2.1": []string{peerEndpoint}}, "firewall": map[string]any{"outbound": []map[string]any{{"port": 19001, "proto": "tcp", "host": "any"}}, "inbound": []map[string]any{{"port": 19001, "proto": "tcp", "host": "any"}}}, "handshakes": map[string]any{"try_interval": "100ms"}}
 		data, err := yaml.Marshal(cfg)
 		if err != nil {
 			t.Fatal(err)
@@ -249,6 +259,10 @@ func TestResourceProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal("CLI transfer CPU sample unavailable")
 	}
+	var faultToPeerStart, faultToClientStart uint64
+	if faults != nil {
+		faultToPeerStart, faultToClientStart = faults.toPeerBytes.Load(), faults.toClientBytes.Load()
+	}
 	transferStart := time.Now()
 	debugTimer := time.AfterFunc(45*time.Second, func() { client.Process.Signal(syscall.SIGUSR1); peer.Process.Signal(syscall.SIGUSR1) })
 	defer debugTimer.Stop()
@@ -294,6 +308,12 @@ func TestResourceProfile(t *testing.T) {
 		}(index, c)
 	}
 	wg.Wait()
+	var faultToPeer, faultToClient uint64
+	if faults != nil {
+		faultToPeer = faults.toPeerBytes.Load() - faultToPeerStart
+		faultToClient = faults.toClientBytes.Load() - faultToClientStart
+		t.Logf("packet faults: dropped=%d reordered=%d transfer_to_peer_bytes=%d transfer_to_client_bytes=%d", faults.dropped.Load(), faults.reordered.Load(), faultToPeer, faultToClient)
+	}
 	close(failures)
 	close(results)
 	var progress []streamResult
@@ -337,6 +357,13 @@ func TestResourceProfile(t *testing.T) {
 	transferCPUEnd, err := processCPUTicks(client.Process.Pid)
 	if err != nil || transferCPUEnd < transferCPUStart {
 		t.Fatal("CLI transfer CPU sample invalid")
+	}
+	if faults != nil {
+		// Both 80 MiB directions must cross the relay. Merely seeing a few
+		// handshake packets would not prove the data path was faulted.
+		if faults.dropped.Load() == 0 || faults.reordered.Load() == 0 || faultToPeer < 80<<20 || faultToClient < 80<<20 {
+			t.Fatal("encrypted transfer bypassed the packet-fault relay or no faults occurred")
+		}
 	}
 	// Retain all 500 sessions to exercise forced, bounded cleanup.
 	peakRSS := memory("VmHWM")
