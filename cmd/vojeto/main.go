@@ -124,6 +124,12 @@ func run() error {
 		return e
 	}
 	runner.SignalGrace = *signalGrace
+	status := func() control.Status {
+		s := runner.Status()
+		active := limit.Active()
+		s.ActiveConnections = &active
+		return s
+	}
 	if settings != nil {
 		runner.CheckHealth = func(ctx context.Context, n network.Network) (bool, bool) {
 			overlay := health.CheckAll(ctx, n, settings.Overlay, 5*time.Second)
@@ -140,7 +146,7 @@ func run() error {
 		if err != nil {
 			return errors.New("health listener unavailable")
 		}
-		server := &http.Server{Handler: control.HealthHandler(runner.Status), ReadHeaderTimeout: time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
+		server := &http.Server{Handler: control.HealthHandler(status), ReadHeaderTimeout: time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
 		defer server.Close()
 		go server.Serve(ln)
 	}
@@ -154,7 +160,7 @@ func run() error {
 		if os.Chmod(*socket, 0600) != nil {
 			return errors.New("control permissions unavailable")
 		}
-		server := &http.Server{Handler: control.Handler(runner.Status, complete), ReadHeaderTimeout: time.Second}
+		server := &http.Server{Handler: control.Handler(status, complete), ReadHeaderTimeout: time.Second}
 		defer server.Close()
 		go server.Serve(ln)
 	}
