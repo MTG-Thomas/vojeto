@@ -4,13 +4,17 @@ package control
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/MTG-Thomas/vojeto/internal/diagnostics"
 )
 
 type Status struct {
-	State             string `json:"state"`
-	IdentityValid     bool   `json:"identity_valid"`
-	OverlayReady      bool   `json:"overlay_ready"`
-	DependenciesReady bool   `json:"dependencies_ready"`
+	ActiveConnections *int                 `json:"active_connections,omitempty"`
+	Process           *diagnostics.Process `json:"process,omitempty"`
+	State             string               `json:"state"`
+	IdentityValid     bool                 `json:"identity_valid"`
+	OverlayReady      bool                 `json:"overlay_ready"`
+	DependenciesReady bool                 `json:"dependencies_ready"`
 }
 
 func Handler(status func() Status, complete func()) http.Handler {
@@ -34,7 +38,10 @@ func healthMux(status func() Status) *http.ServeMux {
 	})
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(status())
+		s := status()
+		process := diagnostics.Snapshot()
+		s.Process = &process
+		json.NewEncoder(w).Encode(s)
 	})
 	return mux
 }

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MTG-Thomas/vojeto/internal/control"
 	"github.com/slackhq/nebula/cert"
 	"github.com/slackhq/nebula/cert_test"
 	"go.yaml.in/yaml/v3"
@@ -228,6 +229,23 @@ func TestResourceProfile(t *testing.T) {
 	}
 	rss := func() int64 { return memory("VmRSS") }
 	measurements := map[int]int64{0: rss()}
+	runtimeSamples := make(map[int]control.Status)
+	sampleRuntime := func(count int) {
+		resp, err := httpClient.Get("http://" + healthAddress + "/status")
+		if err != nil {
+			t.Fatal("CLI runtime diagnostics unavailable")
+		}
+		defer resp.Body.Close()
+		var status control.Status
+		if resp.StatusCode != 200 || json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&status) != nil || status.Process == nil || status.Process.OpenFDs == nil || status.Process.Goroutines < 1 {
+			t.Fatal("CLI runtime diagnostics invalid")
+		}
+		if status.ActiveConnections == nil || *status.ActiveConnections != count {
+			t.Fatal("CLI active connection count differs from admitted workload")
+		}
+		runtimeSamples[count] = status
+	}
+	sampleRuntime(0)
 	var connections []net.Conn
 	defer func() {
 		for _, c := range connections {
@@ -253,6 +271,7 @@ func TestResourceProfile(t *testing.T) {
 			c.SetDeadline(time.Time{})
 		}
 		measurements[count] = rss()
+		sampleRuntime(count)
 	}
 	// Ten streams each move 8 MiB in both directions through encrypted transport.
 	transferCPUStart, err := processCPUTicks(client.Process.Pid)
@@ -384,15 +403,16 @@ func TestResourceProfile(t *testing.T) {
 		t.Fatal("CLI shutdown exceeded bound")
 	}
 	result := struct {
-		Source           string        `json:"source"`
-		RSS              map[int]int64 `json:"rss_bytes_by_connections"`
-		Startup          float64       `json:"startup_to_ready_seconds"`
-		Transfer         float64       `json:"bidirectional_160_mib_seconds"`
-		Drain            float64       `json:"drain_seconds"`
-		PeakRSS          int64         `json:"peak_cli_rss_bytes"`
-		CPU              float64       `json:"cli_total_cpu_seconds"`
-		TransferCPUTicks uint64        `json:"cli_transfer_cpu_ticks"`
-	}{"static identity; loopback encrypted Nebula; separate CLI process", measurements, startup.Seconds(), transfer.Seconds(), time.Since(drainStart).Seconds(), peakRSS, (client.ProcessState.UserTime() + client.ProcessState.SystemTime()).Seconds(), transferCPUEnd - transferCPUStart}
+		Source           string                 `json:"source"`
+		RSS              map[int]int64          `json:"rss_bytes_by_connections"`
+		Startup          float64                `json:"startup_to_ready_seconds"`
+		Transfer         float64                `json:"bidirectional_160_mib_seconds"`
+		Drain            float64                `json:"drain_seconds"`
+		PeakRSS          int64                  `json:"peak_cli_rss_bytes"`
+		CPU              float64                `json:"cli_total_cpu_seconds"`
+		TransferCPUTicks uint64                 `json:"cli_transfer_cpu_ticks"`
+		Runtime          map[int]control.Status `json:"runtime_by_connections"`
+	}{"static identity; loopback encrypted Nebula; separate CLI process", measurements, startup.Seconds(), transfer.Seconds(), time.Since(drainStart).Seconds(), peakRSS, (client.ProcessState.UserTime() + client.ProcessState.SystemTime()).Seconds(), transferCPUEnd - transferCPUStart, runtimeSamples}
 	data, _ := json.Marshal(result)
 	t.Log(string(data))
 }

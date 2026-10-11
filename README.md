@@ -149,9 +149,11 @@ updates leave the identity quarantined. No automatic takeover or reacquisition
 is attempted. Pool provisioning and recovery remain operator responsibilities.
 See [leased identity configuration and shutdown](docs/architecture/leased-runtime.md).
 
-`/live`, `/ready`, and `/status` are available through the control socket. Readiness
+`/live`, `/ready`, and `/status` are available through the control socket. `/status` also exposes
+[aggregate process/session counters](docs/architecture/runtime-counters.md) for
+resource and leak measurements. Readiness
 requires successful configured overlay and dependency probes; process startup
-is not proof of overlay connectivity. Status contains only bounded health fields.
+is not proof of overlay connectivity. Status contains bounded health fields and aggregate counters.
 See [readiness and native drain configuration](docs/architecture/readiness.md).
 
 Container runtime: UID 65532, `--cap-drop ALL --read-only --security-opt
