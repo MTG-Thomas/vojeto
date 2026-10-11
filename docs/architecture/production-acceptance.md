@@ -1,6 +1,6 @@
 # Production acceptance
 
-Source/release evidence reviewed October 10, 2026. This is an acceptance ledger,
+Source/release evidence reviewed October 11, 2026. This is an acceptance ledger,
 not a claim that a particular cloud deployment or memory budget is supported.
 
 | Gate | Current evidence | Remaining acceptance |
@@ -9,14 +9,17 @@ not a claim that a particular cloud deployment or memory budget is supported.
 | Portable core | Race suite, rootless encrypted proofs, finite SOCKS/peer/launcher lifecycle checks pass on main `4bd48c8` | Real consumer dependencies and platform termination behavior |
 | TCP recovery | PR #35 adds RACK flight-accounting regressions, 100 race iterations and unchanged encrypted transfer deadlines; PR #39 repairs diagnostics | Representative loss/reordering soak and peer/router restart evidence; a passing short proof is not a soak |
 | Dynamic enrollment | Grant validation, durable store interface and private same-UID agent client | A concrete consumer agent and host-specific durable backend; paused/restarted owners must not overlap |
-| Resources | Isolated CLI RSS/CPU and 10/100/500 encrypted sessions are measured | Provider acquisition/checkpoint/reconnect latency, sustained CPU, long-running leak checks and actual 64/128/256 MiB budgets |
-| Publication | PR #34 adds exact verified-main/CI/license-gated main-client publication | Artifact signatures/provenance verified by consumers, access policy, tamper rejection and revocation/rollback under #38 |
+| Resources | Isolated CLI RSS and 10/100/500 encrypted sessions are measured; PR #41 adds CLI CPU ticks during sustained transfer with three retained samples | Provider acquisition/checkpoint/reconnect latency, long-running leak checks and actual 64/128/256 MiB budgets |
+| Publication | Exact verified-main/CI/license gates; protected private OCI publishers, keyless signature/statement checks and synthetic tamper rejection are implemented in source | Environment and private destination setup, actual keyless producer/consumer receipt, authorized/unauthorized platform fetch and rollout/rollback admission under #38 |
 | Architecture | ARM64 compilation passes | ARM64 execution before claiming runtime support |
 
 Current validation: [main run 37977837457](https://github.com/MTG-Thomas/vojeto/actions/runs/37977837457).
 Current main-client publication: [run 37978484989](https://github.com/MTG-Thomas/vojeto/actions/runs/37978484989).
 These producer receipts do not establish a deployment's identity ownership,
 application behavior or artifact admission policy.
+The historical publication preceded the [private signed release contract](release-security.md)
+and is not retrospectively certified by it. Future publication must pass that
+contract; no private artifact was published by the source change.
 
 ## Required consumer proof
 

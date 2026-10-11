@@ -12,32 +12,47 @@ concurrency:
   group: publish-vojeto-client
   cancel-in-progress: false
 jobs:
-  publish:
+  preflight:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
-      packages: write
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Verify exact source, signature and CI
+      - name: Admit existing protected environment and private destination
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
+          RELEASE_IMAGE: ${{ vars.VOJETO_CLIENT_RELEASE_IMAGE }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          test "$EXPECTED_SHA" = "$GITHUB_SHA"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.verification.verified')" = true
-          test "$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" --workflow validate.yml --event push --json status,conclusion --jq 'map(select(.status == "completed" and .conclusion == "success")) | length > 0')" = true
-      - name: Publish exact client artifact with complete dependency notices
+        run: python3 scripts/release_policy.py --image "$RELEASE_IMAGE" --expected-sha "$EXPECTED_SHA"
+  publish:
+    needs: preflight
+    if: github.ref == 'refs/heads/main'
+    environment: vojeto-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned OCI signing tool
+        uses: sigstore/cosign-installer@af595e623eec1ede52d6322f53b635d5def0a95a # pinned action source
+        with:
+          cosign-release: v3.1.3
+      - name: Publish, sign, attest and verify private exact-source OCI image
         env:
-          GHCR_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          docker build --target release --tag "ghcr.io/mtg-thomas/vojeto:$GITHUB_SHA" .
-          docker push "ghcr.io/mtg-thomas/vojeto:$GITHUB_SHA"
-          docker inspect --format '{{join .RepoDigests "\n"}}' "ghcr.io/mtg-thomas/vojeto:$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          RELEASE_IMAGE: ${{ vars.VOJETO_CLIENT_RELEASE_IMAGE }}
+          RELEASE_TARGET: release
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish_private_image.sh
