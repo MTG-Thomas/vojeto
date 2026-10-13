@@ -25,13 +25,15 @@ def destination(image, repository):
     return match[2]
 
 
-def protected_environment(environment, branches):
+def protected_environment(environment, branches, *, allow_self_review=False):
     require(environment.get("name") == "vojeto-release")
     policy = environment.get("deployment_branch_policy")
     require(policy == {"protected_branches": False, "custom_branch_policies": True})
     rules = [rule for rule in environment.get("protection_rules", [])
              if rule.get("type") == "required_reviewers"]
-    require(len(rules) == 1 and rules[0].get("prevent_self_review") is True)
+    require(len(rules) == 1)
+    self_review = rules[0].get("prevent_self_review")
+    require(self_review is True or (allow_self_review is True and self_review is False))
     reviewers = rules[0].get("reviewers", [])
     require(bool(reviewers))
     require(all(reviewer.get("type") in ("User", "Team")
@@ -54,7 +56,7 @@ def api(path):
     return json.loads(result.stdout)
 
 
-def preflight(repository, image, expected_sha, github_sha, github_ref):
+def preflight(repository, image, expected_sha, github_sha, github_ref, *, allow_self_review=False):
     require(re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", repository) is not None)
     require(re.fullmatch(r"[0-9a-f]{40}", expected_sha) is not None)
     require(expected_sha == github_sha and github_ref == "refs/heads/main")
@@ -64,7 +66,8 @@ def preflight(repository, image, expected_sha, github_sha, github_ref):
     owner_type = repo.get("owner", {}).get("type")
     require(owner_type in ("User", "Organization"))
     protected_environment(api(f"repos/{repository}/environments/vojeto-release"),
-                          api(f"repos/{repository}/environments/vojeto-release/deployment-branch-policies"))
+                          api(f"repos/{repository}/environments/vojeto-release/deployment-branch-policies"),
+                          allow_self_review=allow_self_review)
     prefix = "orgs" if owner_type == "Organization" else "users"
     package_path = f"{prefix}/{owner}/packages/container/{name}"
     private_package(api(package_path), name, owner)
@@ -95,8 +98,11 @@ def main():
     parser.add_argument("--expected-sha", required=True)
     args = parser.parse_args()
     try:
+        review_setting = os.environ.get("VOJETO_RELEASE_ALLOW_SELF_REVIEW", "")
+        require(review_setting in ("", "false", "true"))
         preflight(os.environ.get("GITHUB_REPOSITORY", ""), args.image, args.expected_sha,
-                  os.environ.get("GITHUB_SHA", ""), os.environ.get("GITHUB_REF", ""))
+                  os.environ.get("GITHUB_SHA", ""), os.environ.get("GITHUB_REF", ""),
+                  allow_self_review=review_setting == "true")
     except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.SubprocessError):
         raise SystemExit("Release refused: protected environment, private package, exact source or CI evidence is missing.") from None
 
