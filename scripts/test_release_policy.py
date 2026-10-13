@@ -29,6 +29,21 @@ class ReleasePolicyTests(unittest.TestCase):
             with self.assertRaises(policy.Rejected):
                 policy.protected_environment(self.environment(), {"total_count": 1, "branch_policies": [branch]})
 
+    def test_self_review_requires_explicit_opt_in_and_still_requires_reviewers(self):
+        e = self.environment()
+        e["protection_rules"][0]["prevent_self_review"] = False
+        policy.protected_environment(e, self.branches(), allow_self_review=True)
+        for value in (False, "true", None):
+            with self.assertRaises(policy.Rejected):
+                policy.protected_environment(e, self.branches(), allow_self_review=value)
+        e["protection_rules"][0]["reviewers"] = []
+        with self.assertRaises(policy.Rejected):
+            policy.protected_environment(e, self.branches(), allow_self_review=True)
+        e = self.environment()
+        del e["protection_rules"][0]["prevent_self_review"]
+        with self.assertRaises(policy.Rejected):
+            policy.protected_environment(e, self.branches(), allow_self_review=True)
+
     def test_package_must_be_existing_private_and_owned(self):
         package = {"name": "fixture-runtime", "package_type": "container", "visibility": "private",
                    "owner": {"login": "fixture-owner"}}

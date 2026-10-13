@@ -18,10 +18,15 @@ fetch tests have not been completed. Existing published digests are unchanged.
 ## Setup and producer checks
 
 Before a release, an administrator must explicitly configure `vojeto-release`
-with required reviewers, prevention of self-review and one deployment branch
-policy of type `branch`, exactly `main`. An independent reviewer must be able to
-approve runs initiated by the publisher. The guard reads the environment; it
-does not create one or grant access. Human approvals remain human steps.
+with required reviewers and one deployment branch policy of type `branch`,
+exactly `main`. Self-review prevention is required by default. An operator may
+explicitly select manual approval by the initiating account: set repository
+variable `VOJETO_RELEASE_ALLOW_SELF_REVIEW=true` and disable the environment’s
+self-review prevention. This permits one person to initiate and manually approve
+a run; it provides no independent-review guarantee. Required reviewers remain
+mandatory, and the agent never submits the human approval. Missing protection
+or reviewer metadata still fails closed. Invalid opt-in values are rejected.
+The guard reads the environment; it does not create one or grant access.
 
 Provision each destination as an existing private GHCR container package owned
 by the repository owner, grant this repository's Actions token the scoped write

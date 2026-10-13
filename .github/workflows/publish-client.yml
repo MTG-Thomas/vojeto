@@ -26,6 +26,7 @@ jobs:
           persist-credentials: false
       - name: Admit existing protected environment and private destination
         env:
+          VOJETO_RELEASE_ALLOW_SELF_REVIEW: ${{ vars.VOJETO_RELEASE_ALLOW_SELF_REVIEW }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           RELEASE_IMAGE: ${{ vars.VOJETO_CLIENT_RELEASE_IMAGE }}
           GH_TOKEN: ${{ github.token }}
@@ -51,6 +52,7 @@ jobs:
           cosign-release: v3.1.3
       - name: Publish, sign, attest and verify private exact-source OCI image
         env:
+          VOJETO_RELEASE_ALLOW_SELF_REVIEW: ${{ vars.VOJETO_RELEASE_ALLOW_SELF_REVIEW }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           RELEASE_IMAGE: ${{ vars.VOJETO_CLIENT_RELEASE_IMAGE }}
           RELEASE_TARGET: release
