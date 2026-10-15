@@ -75,6 +75,7 @@ class ReleasePolicyTests(unittest.TestCase):
         package_path = "users/fixture-owner/packages/container/runtime"
         replies = {
             prefix: {"owner": {"type": "User"}},
+            prefix + "/commits/main": {"sha": sha},
             prefix + "/environments/vojeto-release": self.environment(),
             prefix + "/environments/vojeto-release/deployment-branch-policies": self.branches(),
             package_path: {"name": "runtime", "package_type": "container", "visibility": "private",
@@ -90,6 +91,10 @@ class ReleasePolicyTests(unittest.TestCase):
             with patch.object(policy, "api", side_effect=lambda path: copy.deepcopy(data[path])):
                 policy.preflight(repo, "ghcr.io/fixture-owner/runtime", sha, sha, "refs/heads/main")
         run(replies)
+        stale = copy.deepcopy(replies)
+        stale[prefix + "/commits/main"] = {"sha": "b" * 40}
+        with self.assertRaises(policy.Rejected):
+            run(stale)
         changed = copy.deepcopy(replies)
         changed[package_path + "/versions?per_page=100&page=1"] = [{"metadata": {"container": {"tags": [sha]}}}]
         with self.assertRaises(policy.Rejected):

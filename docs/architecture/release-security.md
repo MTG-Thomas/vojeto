@@ -115,3 +115,29 @@ These checks do not replace actual protected keyless publication, registry
 authorization readback, cloud pull testing, deployment admission or rollback
 acceptance. Track that remaining evidence in issue #38 and the production
 acceptance contract before calling Vojeto production-ready.
+
+## One-time client destination provisioning
+
+The configured `vojeto-client-private` destination must exist before the normal
+signed client publisher can run. The manual `provision-client-destination.yml`
+lane fills only this setup gap. It uses the same `vojeto-release` human approval,
+exact verified current-main and successful exact push-CI requirements; it never
+approves itself, changes protection rules, adds a credential, or changes an
+existing package's visibility/access. It handles only the configured owner-local
+client destination, not the launcher or arbitrary package names.
+
+After read-only metadata reports not-found, the approved job builds the licensed
+`release` target and makes one first-publish attempt under the repository's own
+Actions token. A 404 is not proof that an inaccessible package does not exist;
+the registry must still authorize this repository's write. Other errors and
+already-readable destinations stop the lane. It then requires independent
+readback of private visibility, exact owner and repository association. A failed
+or ambiguous push must be reconciled by metadata readback, never blindly rerun.
+
+The only setup tag is `bootstrap-<full-source-SHA>`. It is not a qualified signed
+release or a deployment pin. Preserve its receipt and run the normal protected
+client publisher afterward; the existing private-package, signing, attestation,
+source-tag and consumer-admission requirements still apply. No existing public
+artifact is retagged or changed. Provisioning creates no Azure resource or
+standing network capacity. Normal release admission also rechecks the live main
+SHA, so a source superseded while waiting for approval cannot publish.
