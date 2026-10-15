@@ -1,9 +1,10 @@
 # Private OCI release admission
 
 Source is public and AGPL-3.0. Future binary publication uses a separate private
-destination and a protected manual release. This is a source implementation;
-protected environment setup, actual keyless publication and deployed private
-fetch tests have not been completed. Existing published digests are unchanged.
+destination and a main-restricted operator-dispatched release. The environment
+exists; its approval transition, actual private keyless publication and deployed
+private fetch tests still need runtime receipts. Existing published digests are
+unchanged by these source edits.
 
 ## Asset and access matrix
 
@@ -17,22 +18,32 @@ fetch tests have not been completed. Existing published digests are unchanged.
 
 ## Setup and producer checks
 
-Before a release, an administrator must explicitly configure `vojeto-release`
-with required reviewers and one deployment branch policy of type `branch`,
-exactly `main`. Self-review prevention is required by default. An operator may
-explicitly select manual approval by the initiating account: set repository
-variable `VOJETO_RELEASE_ALLOW_SELF_REVIEW=true` and disable the environment’s
-self-review prevention. This permits one person to initiate and manually approve
-a run; it provides no independent-review guarantee. Required reviewers remain
-mandatory, and the agent never submits the human approval. Missing protection
-or reviewer metadata still fails closed. Invalid opt-in values are rejected.
-The guard reads the environment; it does not create one or grant access.
+The owner authorizes agents to dispatch package provisioning and ordinary OCI
+releases without a recurring human environment approval. Source review/merge,
+Verified exact current-main commits and successful exact push CI remain the
+admission boundary. Manual workflow dispatch does not mean a human must operate
+it. Publication does not authorize deployment or production cutover.
+
+Configure the existing `vojeto-release` environment with one deployment branch
+policy of type `branch`, exactly `main`, and no required reviewers. Keep the
+branch restriction, environment identity, credentials and scoped package grants.
+The guard reads this environment; it does not create one, grant access, remove
+rules or approve a pending job. Optional administrator-added reviewers or other
+GitHub gates still apply; an agent never silently bypasses them. The old
+`VOJETO_RELEASE_ALLOW_SELF_REVIEW` setting is unused and may be removed.
+
+For the one-time transition, merge this policy and its tests, cancel the older
+waiting publication run, remove only the existing required-reviewer rule while
+preserving exact-main restrictions, then dispatch from the newly validated main.
+Do not approve the superseded workflow or reuse its old-source preflight.
+Azure deployment environments, repository review rules and other release lanes
+are outside this change.
 
 Provision each destination as an existing private GHCR container package owned
 by the repository owner, grant this repository's Actions token the scoped write
 access, and set the two repository variables to untagged
 `ghcr.io/<owner>/<package>` names. The package's visibility and ownership are
-checked before the approval job and again immediately before publication. Missing,
+checked before the publication job and again immediately before publication. Missing,
 public, internal, foreign or unreadable packages fail closed. No visibility
 change, public artifact upload or Azure resource is created by these workflows.
 
@@ -63,7 +74,7 @@ source and CI identity metadata must therefore be safe to disclose; never place
 tenant identifiers or credentials in them. Expected initial signing volume is
 two OCI artifacts per reviewed release, plus their statements; this is a planning
 assumption, not measured consumption. Unexpected release counts require review
-of workflow runs, approvals and package versions.
+of workflow runs and package versions.
 
 ## Consumer and platform delivery
 
@@ -120,13 +131,14 @@ acceptance contract before calling Vojeto production-ready.
 
 The configured `vojeto-client-private` destination must exist before the normal
 signed client publisher can run. The manual `provision-client-destination.yml`
-lane fills only this setup gap. It uses the same `vojeto-release` human approval,
-exact verified current-main and successful exact push-CI requirements; it never
-approves itself, changes protection rules, adds a credential, or changes an
+lane fills only this setup gap. It uses the same main-restricted `vojeto-release` environment,
+exact verified current-main and successful exact push-CI requirements, without
+recurring human approval. It never approves a job, changes protection rules,
+adds a credential, or changes an
 existing package's visibility/access. It handles only the configured owner-local
 client destination, not the launcher or arbitrary package names.
 
-After read-only metadata reports not-found, the approved job builds the licensed
+After read-only metadata reports not-found, the admitted job builds the licensed
 `release` target and makes one first-publish attempt under the repository's own
 Actions token. A 404 is not proof that an inaccessible package does not exist;
 the registry must still authorize this repository's write. Other errors and
@@ -140,4 +152,4 @@ client publisher afterward; the existing private-package, signing, attestation,
 source-tag and consumer-admission requirements still apply. No existing public
 artifact is retagged or changed. Provisioning creates no Azure resource or
 standing network capacity. Normal release admission also rechecks the live main
-SHA, so a source superseded while waiting for approval cannot publish.
+SHA, so a source superseded before publication cannot publish.
