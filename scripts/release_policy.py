@@ -56,11 +56,10 @@ def api(path):
     return json.loads(result.stdout)
 
 
-def preflight(repository, image, expected_sha, github_sha, github_ref, *, allow_self_review=False):
+def reviewed_source(repository, expected_sha, github_sha, github_ref, *, allow_self_review=False):
     require(re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", repository) is not None)
     require(re.fullmatch(r"[0-9a-f]{40}", expected_sha) is not None)
     require(expected_sha == github_sha and github_ref == "refs/heads/main")
-    name = destination(image, repository)
     owner = repository.split("/")[0]
     repo = api(f"repos/{repository}")
     owner_type = repo.get("owner", {}).get("type")
@@ -68,9 +67,8 @@ def preflight(repository, image, expected_sha, github_sha, github_ref, *, allow_
     protected_environment(api(f"repos/{repository}/environments/vojeto-release"),
                           api(f"repos/{repository}/environments/vojeto-release/deployment-branch-policies"),
                           allow_self_review=allow_self_review)
-    prefix = "orgs" if owner_type == "Organization" else "users"
-    package_path = f"{prefix}/{owner}/packages/container/{name}"
-    private_package(api(package_path), name, owner)
+    main = api(f"repos/{repository}/commits/main")
+    require(main.get("sha") == github_sha)
     require(api(f"repos/{repository}/commits/{github_sha}")["commit"]["verification"]["verified"] is True)
     workflow = api(f"repos/{repository}/actions/workflows/validate.yml")
     require(workflow.get("path") == ".github/workflows/validate.yml" and workflow.get("state") == "active")
@@ -79,6 +77,20 @@ def preflight(repository, image, expected_sha, github_sha, github_ref, *, allow_
                 and run.get("head_branch") == "main" and run.get("event") == "push"
                 and run.get("status") == "completed" and run.get("conclusion") == "success"
                 for run in runs.get("workflow_runs", [])))
+    return owner_type
+
+
+def preflight(repository, image, expected_sha, github_sha, github_ref, *, allow_self_review=False):
+    require(re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", repository) is not None)
+    require(re.fullmatch(r"[0-9a-f]{40}", expected_sha) is not None)
+    require(expected_sha == github_sha and github_ref == "refs/heads/main")
+    name = destination(image, repository)
+    owner_type = reviewed_source(repository, expected_sha, github_sha, github_ref,
+                                 allow_self_review=allow_self_review)
+    owner = repository.split("/")[0]
+    prefix = "orgs" if owner_type == "Organization" else "users"
+    package_path = f"{prefix}/{owner}/packages/container/{name}"
+    private_package(api(package_path), name, owner)
     # Refuse re-publication under an existing source tag; never move rollback pins.
     page = 1
     while page <= 1000:
