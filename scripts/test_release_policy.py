@@ -15,34 +15,24 @@ class ReleasePolicyTests(unittest.TestCase):
     def branches(self):
         return {"total_count": 1, "branch_policies": [{"name": "main", "type": "branch"}]}
 
-    def test_environment_requires_independent_review_and_exact_main_branch(self):
+    def test_environment_requires_exact_main_without_recurring_human_approval(self):
+        environment = self.environment()
+        environment["protection_rules"] = [{"type": "branch_policy"}]
+        policy.protected_environment(environment, self.branches())
+        # GitHub may enforce optional admin-added gates; this read-only guard
+        # neither requires nor approves them.
         policy.protected_environment(self.environment(), self.branches())
-        for field, value in [("protection_rules", []), ("deployment_branch_policy", None),
-                             ("name", "unprotected")]:
-            e = self.environment(); e[field] = value
+        for field, value in [("deployment_branch_policy", None), ("name", "unprotected")]:
+            changed = copy.deepcopy(environment); changed[field] = value
             with self.assertRaises(policy.Rejected):
-                policy.protected_environment(e, self.branches())
-        e = self.environment(); e["protection_rules"][0]["prevent_self_review"] = False
-        with self.assertRaises(policy.Rejected):
-            policy.protected_environment(e, self.branches())
-        for branch in [{"name": "*", "type": "branch"}, {"name": "main", "type": "tag"}]:
+                policy.protected_environment(changed, self.branches())
+        for branch in [{"name": "*", "type": "branch"}, {"name": "main", "type": "tag"},
+                       {"name": "feature", "type": "branch"}]:
             with self.assertRaises(policy.Rejected):
-                policy.protected_environment(self.environment(), {"total_count": 1, "branch_policies": [branch]})
-
-    def test_self_review_requires_explicit_opt_in_and_still_requires_reviewers(self):
-        e = self.environment()
-        e["protection_rules"][0]["prevent_self_review"] = False
-        policy.protected_environment(e, self.branches(), allow_self_review=True)
-        for value in (False, "true", None):
-            with self.assertRaises(policy.Rejected):
-                policy.protected_environment(e, self.branches(), allow_self_review=value)
-        e["protection_rules"][0]["reviewers"] = []
+                policy.protected_environment(environment, {"total_count": 1, "branch_policies": [branch]})
         with self.assertRaises(policy.Rejected):
-            policy.protected_environment(e, self.branches(), allow_self_review=True)
-        e = self.environment()
-        del e["protection_rules"][0]["prevent_self_review"]
-        with self.assertRaises(policy.Rejected):
-            policy.protected_environment(e, self.branches(), allow_self_review=True)
+            policy.protected_environment(environment, {"total_count": 2, "branch_policies": [
+                {"name": "main", "type": "branch"}, {"name": "*", "type": "branch"}]})
 
     def test_package_must_be_existing_private_and_owned(self):
         package = {"name": "fixture-runtime", "package_type": "container", "visibility": "private",

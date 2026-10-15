@@ -7,12 +7,11 @@ import subprocess
 import release_policy as policy
 
 
-def check(repository, image, source, github_sha, github_ref, *, allow_self_review=False):
+def check(repository, image, source, github_sha, github_ref):
     name = policy.destination(image, repository)
     # Match only the configured client; this lane never provisions launchers.
     policy.require(name == 'vojeto-client-private')
-    owner_type = policy.reviewed_source(repository, source, github_sha, github_ref,
-                                         allow_self_review=allow_self_review)
+    owner_type = policy.reviewed_source(repository, source, github_sha, github_ref)
     owner = repository.split('/')[0]
     path = f'{"orgs" if owner_type == "Organization" else "users"}/{owner}/packages/container/{name}'
     try:
@@ -49,11 +48,8 @@ def main():
         if args.mode == 'verify':
             verify(repo, image)
         else:
-            setting = os.environ.get('VOJETO_RELEASE_ALLOW_SELF_REVIEW', '')
-            policy.require(setting in ('', 'false', 'true'))
             check(repo, image, os.environ.get('EXPECTED_SHA', ''),
-                  os.environ.get('GITHUB_SHA', ''), os.environ.get('GITHUB_REF', ''),
-                  allow_self_review=setting == 'true')
+                  os.environ.get('GITHUB_SHA', ''), os.environ.get('GITHUB_REF', ''))
         print(json.dumps({'destination': image, 'mode': args.mode, 'qualifiedRelease': False}))
     except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.SubprocessError):
         raise SystemExit('Private destination setup refused; preserve state and inspect source, access and package metadata.') from None

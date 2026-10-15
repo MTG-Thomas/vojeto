@@ -18,11 +18,11 @@ class ProvisionReleaseTests(unittest.TestCase):
     def error(self, status):
         return subprocess.CalledProcessError(1, ['gh', 'api'], output=json.dumps({'status': status}))
 
-    def test_only_not_found_can_reach_first_publish_after_source_approval_checks(self):
+    def test_only_not_found_can_reach_first_publish_after_source_admission_checks(self):
         with patch.object(policy, 'reviewed_source', return_value='User') as source:
             with patch.object(policy, 'api', side_effect=self.error('404')):
                 self.assertEqual(self.check(), 'users/fixture-owner/packages/container/vojeto-client-private')
-            source.assert_called_once_with(self.repo, self.sha, self.sha, 'refs/heads/main', allow_self_review=False)
+            source.assert_called_once_with(self.repo, self.sha, self.sha, 'refs/heads/main')
 
     def test_existing_destination_is_never_replaced_even_if_private(self):
         with patch.object(policy, 'reviewed_source', return_value='User'):
@@ -48,7 +48,7 @@ class ProvisionReleaseTests(unittest.TestCase):
                 source.assert_not_called()
                 api.assert_not_called()
 
-    def test_bad_source_or_missing_human_protection_never_reaches_package_check(self):
+    def test_bad_source_or_missing_main_protection_never_reaches_package_check(self):
         with patch.object(policy, 'reviewed_source', side_effect=policy.Rejected()):
             with patch.object(policy, 'api') as api:
                 with self.assertRaises(policy.Rejected):
