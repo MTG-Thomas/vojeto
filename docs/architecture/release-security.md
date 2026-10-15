@@ -1,155 +1,92 @@
-# Private OCI release admission
+# OCI release admission
 
-Source is public and AGPL-3.0. Future binary publication uses a separate private
-destination and a main-restricted operator-dispatched release. The environment
-exists; its approval transition, actual private keyless publication and deployed
-private fetch tests still need runtime receipts. Existing published digests are
-unchanged by these source edits.
+Vojeto source is public and AGPL-3.0. The owner expressly selected a signed
+public portable client to simplify delivery on October 15, 2026. Public client
+images contain software, CA roots and license notices; tenant enrollment state,
+keys, routes and provider configuration remain runtime inputs. The separate
+router launcher retains its private-destination policy. Private Bifrost consumer
+bundles and Azure deployment are owned by the infra repository.
 
-## Asset and access matrix
+## Producer boundary
 
-| Asset | Current release path | Signing/admission | Remaining proof |
-| --- | --- | --- | --- |
-| Linux amd64 Vojeto OCI client | Private package supplied by `VOJETO_CLIENT_RELEASE_IMAGE` | Cosign keyless digest signature and signed release statement | Protected environment, authorized/unauthorized fetch, actual keyless producer/consumer verification |
-| Linux amd64 router launcher OCI | Private package supplied by `VOJETO_LAUNCHER_RELEASE_IMAGE` | Same contract, separate workflow identity/target | Same delivery proof; launcher is not required for the worker adapter |
-| Linux arm64 runtime | Compilation and rootless image defaults checked | Not published by these workflows | ARM64 execution and private signed multi-architecture producer |
-| Windows peer executable | Compiled for source validation only | No distributed Windows asset | Azure Artifact Signing Public Trust, RFC 3161 timestamp and private delivery if Windows distribution is requested |
-| Source, release notes and notices | Public Git repository | Signed source commit, preserved third-party obligations | No private enrollment state may be committed |
+Agents may dispatch ordinary releases without recurring human approval. Keep
+the existing `vojeto-release` environment restricted to the single branch
+`main`. Source review/merge, GitHub Verified exact current-main commits and
+successful exact-source push `validate.yml` CI remain mandatory. The read-only
+guard does not create environments, grant access or approve jobs. Optional
+administrator-added GitHub gates still apply. Publication does not authorize
+Azure deployment or production cutover.
 
-## Setup and producer checks
+Set `VOJETO_CLIENT_RELEASE_IMAGE=ghcr.io/mtg-thomas/vojeto`, the existing public
+client destination. The client workflow explicitly requests public visibility;
+public admission is limited to the owner-local package named `vojeto`. A public
+launcher, foreign owner, internal package, mutable image input, stale source or
+failed CI is refused. `VOJETO_LAUNCHER_RELEASE_IMAGE` remains an existing private
+owner-local package; default admission remains private. No workflow changes
+package visibility or creates a registry credential.
 
-The owner authorizes agents to dispatch package provisioning and ordinary OCI
-releases without a recurring human environment approval. Source review/merge,
-Verified exact current-main commits and successful exact push CI remain the
-admission boundary. Manual workflow dispatch does not mean a human must operate
-it. Publication does not authorize deployment or production cutover.
+The workflow rechecks source and visibility immediately before publication.
+Previously used full-source tags are rejected across paginated versions, and
+concurrency serializes publishers. A successful push followed by failed signing
+is not a qualified release. Preserve its receipt and publish a newly reviewed
+source; never overwrite a source tag, re-sign unreviewed bytes or clear active
+rollback artifacts. A failed/ambiguous mutation requires independent registry
+readback before deciding what to do next.
 
-Configure the existing `vojeto-release` environment with one deployment branch
-policy of type `branch`, exactly `main`, and no required reviewers. Keep the
-branch restriction, environment identity, credentials and scoped package grants.
-The guard reads this environment; it does not create one, grant access, remove
-rules or approve a pending job. Optional administrator-added reviewers or other
-GitHub gates still apply; an agent never silently bypasses them. The old
-`VOJETO_RELEASE_ALLOW_SELF_REVIEW` setting is unused and may be removed.
+The release targets require the dependency license inventory. Preserve the
+source license and notices, including their redistribution obligations. Linux
+amd64 is the qualified publication platform. ARM64 compilation and Windows
+compilation are source evidence, not distributed runtime support. Windows
+signing/private delivery requires its own acceptance if requested.
 
-For the one-time transition, merge this policy and its tests, cancel the older
-waiting publication run, remove only the existing required-reviewer rule while
-preserving exact-main restrictions, then dispatch from the newly validated main.
-Do not approve the superseded workflow or reuse its old-source preflight.
-Azure deployment environments, repository review rules and other release lanes
-are outside this change.
+## Signing and consumer admission
 
-Provision each destination as an existing private GHCR container package owned
-by the repository owner, grant this repository's Actions token the scoped write
-access, and set the two repository variables to untagged
-`ghcr.io/<owner>/<package>` names. The package's visibility and ownership are
-checked before the publication job and again immediately before publication. Missing,
-public, internal, foreign or unreadable packages fail closed. No visibility
-change, public artifact upload or Azure resource is created by these workflows.
+Cosign 3.1.3 uses a commit-pinned installer with a pinned binary checksum.
+GitHub OIDC obtains a short-lived keyless identity; no signing key or signing
+credential is exported. Fulcio and transparency verification remain enabled.
+The signature binds digest, source SHA and repository. The signed release
+statement binds digest, source, exact workflow/ref, producer run and attempt,
+platform, target, environment and signing identity/issuer.
 
-The manual dispatch's expected SHA must equal the actual `main` workflow source,
-be reported Verified by GitHub and have a successful exact-source push run of
-`validate.yml`. Previously used source tags are rejected, including across
-paginated package versions. Concurrency prevents two publishers in one lane from
-moving a tag. If a push succeeds but signing/attestation fails, that tag is not a
-qualified release and cannot be overwritten by a retry. Preserve the failed
-receipt and publish a newly reviewed source rather than silently replacing it.
+Before consuming an image, run `python3 scripts/verify_release.py --image
+<image@sha256:digest> --repository MTG-Thomas/vojeto --source <accepted-source>
+--kind client` with pinned Cosign. Both cryptographic checks must pass before
+statement admission. A successful push, public download or Git SHA tag alone
+is insufficient. The producer verifies the same contract before reporting a
+qualified release. Retain the immutable digest and producer receipt in infra.
 
-The normal release Docker targets still require the complete dependency notice
-inventory. Images contain portable software, with rootless defaults; no tenant
-enrollment state, routes, SASs, provider credentials or private configuration is
-baked into them. Their SHA-256 OCI digest is the artifact checksum.
+Client pulls require no registry credential. This does not remove credentials
+needed for private Bifrost bundles or other private images. Sigstore records
+signing identity and artifact metadata publicly; never place tenant details or
+secrets in image names, annotations or statements. Signature metadata does not
+expose runtime inputs, which are not baked into the artifact.
 
-Cosign 3.1.3 is installed by an action pinned to a full commit with a pinned binary
-checksum. GitHub OIDC obtains short-lived signing identity; no signing key export
-or long-lived signing credential is stored. Fulcio and transparency verification
-remain enabled for real OCI releases. The signature binds source SHA/repository;
-the signed release statement binds OCI digest, source, workflow/ref, CI run and
-attempt, platform, target, protected environment and signing identity/issuer.
-The producer verifies both before reporting success.
+Private launcher delivery must still prove authorized and unauthorized pulls
+and its actual workload delivery path. No new ACR, paid registry, broad Azure
+grant or long-lived credential is introduced by this public-client choice.
 
-Sigstore's public transparency infrastructure records signing metadata and
-digests. It does not make private image bytes downloadable. Image/package names,
-source and CI identity metadata must therefore be safe to disclose; never place
-tenant identifiers or credentials in them. Expected initial signing volume is
-two OCI artifacts per reviewed release, plus their statements; this is a planning
-assumption, not measured consumption. Unexpected release counts require review
-of workflow runs and package versions.
+## Bootstrap failure and evidence limits
 
-## Consumer and platform delivery
+Private-client provisioning run `38799799447` pushed only
+`vojeto-client-private:bootstrap-8b850b1847aa74e879cd6ccdaa245baae74d1fb4`, digest
+`sha256:0fcf1479e757eff0ec46a052527436dfcb94b57fee0d86c1d9703d1b8988d785`.
+Independent readback reported a public package and the post-push guard refused
+it. Its sole version and creation timestamp were retained. No signed client
+release or deployment was dispatched from that failed setup. Do not use this
+unsigned bootstrap as a deployment pin. Existing public artifacts are unchanged.
+The obsolete private-client provisioning workflow is retired; no package was
+deleted or made public by a visibility-setting mutation.
 
-Authenticate to the private registry through the reviewed delivery adapter, then
-run `python3 scripts/verify_release.py --image <image@sha256:digest>
---repository <owner/repo> --source <reviewed-commit> --kind client` with the pinned
-Cosign tool available. The helper requires the exact workflow identity, GitHub
-issuer, commit and manual-dispatch claim, and checks the signed statement only
-after cryptographic signature/attestation verification. It makes no deployment
-or trust-setting changes. The infra operator must reject a failing result before
-preview/admission and retain the evidence with its immutable pin.
+GitHub documents that public packages cannot become private again. The owner
+therefore selected the existing public client destination rather than another
+private bootstrap path. Future privacy requirements need a separately reviewed
+private delivery design; they must not be inferred from a package name or an
+assumed registry default.
 
-GHCR preparation does not establish ACA workload-identity image delivery. A
-platform with native Entra/managed-identity pulls may need a separately approved
-private ACR destination and OIDC grants. No long-lived registry secret, new paid
-registry or broad Azure grant is introduced here. The private infra lane must
-select and verify its actual delivery path, including an authorized pull from
-the declared workload and a rejected unauthorized pull, before cutover. Repository
-metadata and a local Docker login do not prove those properties.
-
-## Failure, rollback and revocation
-
-Consumers pin both digest and accepted source. For releases admitted under this
-policy, rollback selects a previously accepted private digest with its verified
-receipt, following the environment's drain and checkpoint runbook. Never select
-an unsigned tag, re-sign unreviewed bytes, clear quarantined identities or move an
-existing source tag to make rollback start. Legacy prototype rollback remains
-under its recorded private deployment policy until the replacement is accepted;
-it is not retrospectively certified by this publisher.
-
-For a compromised workflow/identity or withdrawn source, stop publication at the
-protected environment, revoke its package grant and deny the exact source/digest
-in the private deployment admission policy. Retain receipts and the accepted
-rollback digest. Short-lived certificates are verified with transparency evidence;
-do not pin a rotating leaf-certificate thumbprint or disable verification to
-recover. Registry retention/deletion must preserve every active and rollback pin
-and use the deployment repository's explicit cleanup authorization.
-
-## Evidence limits
-
-Policy tests reject unprotected/wrong-ref/public/foreign inputs. Consumer tests
-reject changed source, digest, identity, target, platform and empty evidence and
-prove that an untrusted signature never reaches statement admission. The offline
-synthetic Cosign test verifies a generated fixture and rejects modified content;
-its test-only key is destroyed on exit. Ignoring a transparency log is restricted
-to that synthetic offline fixture, never the OCI producer or consumer.
-
-These checks do not replace actual protected keyless publication, registry
-authorization readback, cloud pull testing, deployment admission or rollback
-acceptance. Track that remaining evidence in issue #38 and the production
-acceptance contract before calling Vojeto production-ready.
-
-## One-time client destination provisioning
-
-The configured `vojeto-client-private` destination must exist before the normal
-signed client publisher can run. The manual `provision-client-destination.yml`
-lane fills only this setup gap. It uses the same main-restricted `vojeto-release` environment,
-exact verified current-main and successful exact push-CI requirements, without
-recurring human approval. It never approves a job, changes protection rules,
-adds a credential, or changes an
-existing package's visibility/access. It handles only the configured owner-local
-client destination, not the launcher or arbitrary package names.
-
-After read-only metadata reports not-found, the admitted job builds the licensed
-`release` target and makes one first-publish attempt under the repository's own
-Actions token. A 404 is not proof that an inaccessible package does not exist;
-the registry must still authorize this repository's write. Other errors and
-already-readable destinations stop the lane. It then requires independent
-readback of private visibility, exact owner and repository association. A failed
-or ambiguous push must be reconciled by metadata readback, never blindly rerun.
-
-The only setup tag is `bootstrap-<full-source-SHA>`. It is not a qualified signed
-release or a deployment pin. Preserve its receipt and run the normal protected
-client publisher afterward; the existing private-package, signing, attestation,
-source-tag and consumer-admission requirements still apply. No existing public
-artifact is retagged or changed. Provisioning creates no Azure resource or
-standing network capacity. Normal release admission also rechecks the live main
-SHA, so a source superseded before publication cannot publish.
+Policy tests cover exact main/CI, visibility, owner and immutable tag rejection.
+Consumer tests cover changed digest/source/identity/target/platform and ensure
+untrusted signatures do not reach statement admission. Offline synthetic Cosign
+tests destroy their test-only key; transparency bypass is confined to that
+synthetic test, never the OCI producer/consumer. Actual signed publication,
+consumer verification and cloud lifecycle/rollback remain required before
+calling Vojeto an accepted prototype replacement (issue #38).

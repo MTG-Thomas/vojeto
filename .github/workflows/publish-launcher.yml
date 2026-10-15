@@ -54,5 +54,6 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           RELEASE_IMAGE: ${{ vars.VOJETO_LAUNCHER_RELEASE_IMAGE }}
           RELEASE_TARGET: launcher-release
+          RELEASE_VISIBILITY: private
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/publish_private_image.sh
+        run: bash scripts/publish_oci_image.sh
