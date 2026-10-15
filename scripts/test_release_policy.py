@@ -44,6 +44,20 @@ class ReleasePolicyTests(unittest.TestCase):
             with self.assertRaises(policy.Rejected):
                 policy.private_package(changed, "fixture-runtime", "fixture-owner")
 
+    def test_public_client_requires_explicit_visibility_and_fixed_destination(self):
+        package = {"name": "vojeto", "package_type": "container", "visibility": "public", "owner": {"login": "fixture-owner"}}
+        policy.package_visibility(package, "vojeto", "fixture-owner", "public")
+        with self.assertRaises(policy.Rejected): policy.private_package(package, "vojeto", "fixture-owner")
+        with patch.object(policy, "reviewed_source", return_value="User"), patch.object(policy, "api", side_effect=[package, []]):
+            policy.preflight("fixture-owner/repo", "ghcr.io/fixture-owner/vojeto", "a"*40, "a"*40, "refs/heads/main", visibility="public")
+        with patch.object(policy, "api") as api:
+            with self.assertRaises(policy.Rejected):
+                policy.preflight("fixture-owner/repo", "ghcr.io/fixture-owner/launcher", "a"*40, "a"*40, "refs/heads/main", visibility="public")
+            api.assert_not_called()
+        for visibility in ("private", "internal"):
+            changed = {**package, "visibility": visibility}
+            with self.assertRaises(policy.Rejected): policy.package_visibility(changed, "vojeto", "fixture-owner", "public")
+
     def test_destination_rejects_tags_digests_foreign_owners_and_urls(self):
         self.assertEqual(policy.destination("ghcr.io/fixture-owner/runtime", "fixture-owner/repo"), "runtime")
         for image in ["ghcr.io/other/runtime", "ghcr.io/fixture-owner/runtime:latest",

@@ -1,4 +1,4 @@
-"""Read-only admission checks for a protected, private OCI release.
+"""Read-only admission checks for a main-restricted OCI release.
 
 No environment, package, access grant or visibility change is made here.
 """
@@ -37,10 +37,15 @@ def protected_environment(environment, branches):
     require(admitted[0].get("name") == "main" and admitted[0].get("type") == "branch")
 
 
-def private_package(package, name, owner):
+def package_visibility(package, name, owner, visibility):
+    require(visibility in ('private', 'public'))
     require(package.get("name") == name and package.get("package_type") == "container")
-    require(package.get("visibility") == "private")
+    require(package.get("visibility") == visibility)
     require(package.get("owner", {}).get("login", "").lower() == owner.lower())
+
+
+def private_package(package, name, owner):
+    package_visibility(package, name, owner, 'private')
 
 
 def api(path):
@@ -72,16 +77,19 @@ def reviewed_source(repository, expected_sha, github_sha, github_ref):
     return owner_type
 
 
-def preflight(repository, image, expected_sha, github_sha, github_ref):
+def preflight(repository, image, expected_sha, github_sha, github_ref, *, visibility='private'):
     require(re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", repository) is not None)
     require(re.fullmatch(r"[0-9a-f]{40}", expected_sha) is not None)
     require(expected_sha == github_sha and github_ref == "refs/heads/main")
     name = destination(image, repository)
+    require(visibility in ('private', 'public'))
+    # Public admission is limited to the expressly approved portable client.
+    require(visibility == 'private' or image == f"ghcr.io/{repository.split('/')[0].lower()}/vojeto")
     owner_type = reviewed_source(repository, expected_sha, github_sha, github_ref)
     owner = repository.split("/")[0]
     prefix = "orgs" if owner_type == "Organization" else "users"
     package_path = f"{prefix}/{owner}/packages/container/{name}"
-    private_package(api(package_path), name, owner)
+    package_visibility(api(package_path), name, owner, visibility)
     # Refuse re-publication under an existing source tag; never move rollback pins.
     page = 1
     while page <= 1000:
@@ -99,12 +107,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
     parser.add_argument("--expected-sha", required=True)
+    parser.add_argument("--visibility", choices=("private", "public"), default="private")
     args = parser.parse_args()
     try:
         preflight(os.environ.get("GITHUB_REPOSITORY", ""), args.image, args.expected_sha,
-                  os.environ.get("GITHUB_SHA", ""), os.environ.get("GITHUB_REF", ""))
+                  os.environ.get("GITHUB_SHA", ""), os.environ.get("GITHUB_REF", ""), visibility=args.visibility)
     except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.SubprocessError):
-        raise SystemExit("Release refused: protected environment, private package, exact source or CI evidence is missing.") from None
+        raise SystemExit("Release refused: protected environment, approved package visibility, exact source or CI evidence is missing.") from None
 
 
 if __name__ == "__main__":

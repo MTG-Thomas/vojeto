@@ -4,7 +4,7 @@ set -euo pipefail
 test "$GITHUB_REF" = refs/heads/main
 test "$EXPECTED_SHA" = "$GITHUB_SHA"
 case "$RELEASE_TARGET" in release|launcher-release) ;; *) exit 1 ;; esac
-python3 scripts/release_policy.py --image "$RELEASE_IMAGE" --expected-sha "$EXPECTED_SHA"
+python3 scripts/release_policy.py --image "$RELEASE_IMAGE" --expected-sha "$EXPECTED_SHA" --visibility "$RELEASE_VISIBILITY"
 printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 docker build --target "$RELEASE_TARGET" \
