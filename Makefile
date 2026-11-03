@@ -14,7 +14,7 @@ build-launcher:
 .PHONY: secret-scan pre-push
 # Local authenticated gate; keep CI/check/test targets unchanged.
 secret-scan:
-	$(PYTHON) scripts/secret_gate.py
+	$(PYTHON) -I scripts/secret_gate.py
 
 pre-push: secret-scan
 
