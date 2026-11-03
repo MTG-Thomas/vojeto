@@ -16,7 +16,8 @@ build-launcher:
 secret-scan:
 	$(PYTHON) -I scripts/secret_gate.py
 
-pre-push: secret-scan
+pre-push:
+	$(PYTHON) -I scripts/secret_gate.py --pre-push
 
 # Override with PYTHON=python on native Windows.
 PYTHON ?= python3
