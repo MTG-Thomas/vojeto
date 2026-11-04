@@ -10,3 +10,26 @@ build-peer:
 
 build-launcher:
 	@set -eu; task_dir=$$(mktemp -d); trap 'rm -rf "$$task_dir"' EXIT; scripts/prepare-nebula-patch.sh "$$task_dir/nebula" "$$task_dir/vojeto.mod"; CGO_ENABLED=0 go build -modfile="$$task_dir/vojeto.mod" -trimpath -o vojeto-launcher ./cmd/vojeto-launcher
+
+.PHONY: secret-scan pre-push
+# Local authenticated gate; keep CI/check/test targets unchanged.
+secret-scan: secret-gate-python
+	"$(SECRET_GATE_PYTHON)" -I scripts/secret_gate.py
+
+pre-push: secret-gate-python
+	"$(SECRET_GATE_PYTHON)" -I scripts/secret_gate.py --pre-push
+
+# Native Windows: set MTG_SECRET_GATE_PYTHON to an approved absolute interpreter.
+PYTHON ?= python3
+
+.PHONY: secret-gate-python
+ifeq ($(OS),Windows_NT)
+SECRET_GATE_PYTHON ?= $(MTG_SECRET_GATE_PYTHON)
+else
+SECRET_GATE_PYTHON ?= $(PYTHON)
+endif
+
+secret-gate-python:
+ifeq ($(OS),Windows_NT)
+	$(if $(or $(findstring :/,$(subst \,/,$(SECRET_GATE_PYTHON))),$(filter //%,$(subst \,/,$(SECRET_GATE_PYTHON)))),,$(error UNAVAILABLE: set MTG_SECRET_GATE_PYTHON to an approved absolute Python path outside all Git checkouts; publication blocked))
+endif
