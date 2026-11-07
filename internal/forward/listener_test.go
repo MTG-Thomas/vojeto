@@ -2,6 +2,7 @@ package forward
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/netip"
@@ -60,6 +61,45 @@ func TestRelayHalfCloseBothDirections(t *testing.T) {
 }
 
 type stalledNetwork struct{}
+
+type failedTypedNilNetwork struct{}
+
+func (failedTypedNilNetwork) Resolve(context.Context, string) ([]netip.Addr, error) {
+	return []netip.Addr{netip.MustParseAddr("192.0.2.1")}, nil
+}
+
+func (failedTypedNilNetwork) DialTCP(context.Context, netip.AddrPort) (net.Conn, error) {
+	var connection *net.TCPConn
+	return connection, errors.New("synthetic dial failure")
+}
+
+func TestFailedDialTypedNilClosesAdmissionWithoutRelay(t *testing.T) {
+	global := NewLimit(1)
+	listener, err := Open(context.Background(), failedTypedNilNetwork{},
+		Config{"unavailable", "127.0.0.1:0", "service.example:5432", 1, time.Second}, global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	defer listener.Drain(ctx)
+	client, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	client.SetReadDeadline(time.Now().Add(time.Second))
+	var buffer [1]byte
+	if _, err := client.Read(buffer[:]); err != io.EOF {
+		t.Fatalf("failed destination must close the admitted client: %v", err)
+	}
+	if err := listener.Drain(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if global.Active() != 0 || listener.Active() != 0 {
+		t.Fatal("failed destination retained an admission slot")
+	}
+}
 
 func (stalledNetwork) Resolve(context.Context, string) ([]netip.Addr, error) {
 	return []netip.Addr{netip.MustParseAddr("192.0.2.1")}, nil
