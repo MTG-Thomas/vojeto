@@ -130,7 +130,7 @@ func (l *Listener) accept() {
 				}
 			}
 			cancel()
-			if remote == nil {
+			if e != nil || remote == nil {
 				return
 			}
 			Relay(l.ctx, c, remote)
